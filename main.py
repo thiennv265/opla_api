@@ -84,7 +84,7 @@ def getdata(token: str):
                        "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","owner_id","opportunities_products",
                        "locked","date_closed_actual","discussions","is_parent","source","opportunity_status","project_type","opportunities_contacts",
                        "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities"]
-      special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts__opportunities"]
+      special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities"]
       for index, item in enumerate(sources):
         row = {}
         for key, value in item.items():
