@@ -219,7 +219,7 @@ async def last_update(token: str = Query(...)):
     if token in cache:
       return {"updated": cache[token]["updated"]}
     else:
-  return {"updated": "N/A F5"}
+      return {"updated": "N/A"}
 
 @app.get("/opla/excel")
 def download_excel(token: str = Query(...), secrets: str = Query(...)):
@@ -228,7 +228,7 @@ def download_excel(token: str = Query(...), secrets: str = Query(...)):
   with lock:
     if token not in cache:
       cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads": getleads(token)}
-      df = pd.DataFrame(cache[token]["data"])
+    df = pd.DataFrame(cache[token]["data"])
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
       df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
@@ -244,7 +244,7 @@ def download_excel(token: str = Query(...), secrets: str = Query(...)):
   with lock:
     if token not in cache:
       cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads": getleads(token)}
-      df = pd.DataFrame(cache[token]["leads"])
+    df = pd.DataFrame(cache[token]["leads"])
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
       df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
