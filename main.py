@@ -25,31 +25,26 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from urllib.parse import urlparse, parse_qs, urlencode
 
 app = FastAPI(docs_url = None, redoc_url = None, openapi_url = None)
-def mask_sensitive_info(url: str) -> str:
-    parsed = urlparse(url)
-    query = parse_qs(parsed.query)
-
+def mask_sensitive_query(query_params) -> str:
+    masked_params = {}
     masked = False
-    for key in ["token", "secrets"]:
-        if key in query:
-            query[key] = ["****"]
+    for key, value in query_params.multi_items():
+        if key in ["token", "secrets"]:
+            masked_params[key] = "****"
             masked = True
-
-    if masked:
-        masked_query = urlencode(query, doseq=True)
-        return f"{parsed.path}?{masked_query}" if masked_query else parsed.path
-    else:
-        return url  # Không có gì cần mask, in nguyên gốc
+        else:
+            masked_params[key] = value
+    return "?" + urlencode(masked_params) if masked_params else ""
 
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        masked_url = mask_sensitive_info(str(request.url))
-        print(f"{request.method} {masked_url}")
+        # reconstruct masked URL manually
+        path = request.url.path
+        query_string = mask_sensitive_query(request.query_params)
+        print(f"{request.method} {path}{query_string}")
         response = await call_next(request)
         return response
-
 app.add_middleware(LoggingMiddleware)
-
 cache = TTLCache(maxsize=1000, ttl=3000)  # 2 tiếng
 lock = Lock()
 
@@ -137,7 +132,7 @@ def getdata(token: str):
 def getleads(token: str):
     print (f"#{get_current_time_str()} Getting Leads") 
     raw_rows = []
-    url = f"https://api-admin.oplacrm.com/api/public/leads"
+    url = f"https://api-admin.oplacrm.com/api/public/leads?take=100000"
     headers = {
         "Authorization": token
     }
