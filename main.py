@@ -176,22 +176,32 @@ def home():
 
 @app.get("/opla/")
 def api_opla(token: str = Query(...), secrets: str = Query(...)):
-if secrets == 'chucm@ym@n8686':
-  with lock:
-    if token not in cache:
-      cache[token] = {"data": getdata(token), "updated": get_current_time_str()}
-    return cache[token]["data"]
-else:
-  return {"Lỗi": "Sai secrets :("}
+  if secrets == 'chucm@ym@n8686':
+    with lock:
+      if token not in cache:
+        cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads: ": getleads(token)}
+      return cache[token]["data"]
+  else:
+    return {"Lỗi": "Sai secrets :("}
+
+@app.get("/leads/")
+def api_lead(token: str = Query(...), secrets: str = Query(...)):
+  if secrets == 'chucm@ym@n8686':
+    with lock:
+      if token not in cache:
+        cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads": getleads(token)}
+      return cache[token]["leads"]
+  else:
+    return {"Lỗi": "Sai secrets :("}
 
 @app.get("/now/")
 def api_now(token: str = Query(...), secrets: str = Query(...)):
-if secrets == 'chucm@ym@n8686':
-  with lock:
-    cache[token] = {"data": getdata(token), "updated": get_current_time_str()}
-  return cache[token]["data"]
-else:
-  return {"Lỗi": "Sai secrets :("}
+  if secrets == 'chucm@ym@n8686':
+    with lock:
+      cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads": getleads(token)}
+    return cache[token]["data"]
+  else:
+    return {"Lỗi": "Sai secrets :("}
 
 @app.get("/clear/")
 def api_clear(token: str = Query(...), secrets: str = Query(...)):
@@ -217,12 +227,28 @@ def download_excel(token: str = Query(...), secrets: str = Query(...)):
     return {"Lỗi": "Sai secrets :("}
   with lock:
     if token not in cache:
-      cache[token] = {"data": getdata(token), "updated": get_current_time_str()}
+      cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads": getleads(token)}
       df = pd.DataFrame(cache[token]["data"])
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
       df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
       output.seek(0)
-      headers = {"Content-Disposition": f"attachment; filename={get_current_time_str()}.xlsx",
+      headers = {"Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx",
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+    return Response(content=output.read(), media_type=headers["Content-Type"], headers=headers)
+
+@app.get("/leads/excel")
+def download_excel(token: str = Query(...), secrets: str = Query(...)):
+  if secrets != 'chucm@ym@n8686':
+    return {"Lỗi": "Sai secrets :("}
+  with lock:
+    if token not in cache:
+      cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads": getleads(token)}
+      df = pd.DataFrame(cache[token]["leads"])
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+      df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
+      output.seek(0)
+      headers = {"Content-Disposition": f"attachment; filename=leads_{get_current_time_str()}.xlsx",
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
     return Response(content=output.read(), media_type=headers["Content-Type"], headers=headers)
