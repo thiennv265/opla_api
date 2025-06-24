@@ -17,12 +17,39 @@ import openpyxl
 import requests
 import json
 import pandas as pd
-from fastapi import FastAPI, Query, Response
+from fastapi import FastAPI, Query, Response, Request
 from datetime import datetime, timezone, timedelta
 from cachetools import TTLCache
 from threading import Lock
+from starlette.middleware.base import BaseHTTPMiddleware
+from urllib.parse import urlparse, parse_qs, urlencode
 
 app = FastAPI(docs_url = None, redoc_url = None, openapi_url = None)
+def mask_sensitive_info(url: str) -> str:
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+
+    masked = False
+    for key in ["token", "secrets"]:
+        if key in query:
+            query[key] = ["****"]
+            masked = True
+
+    if masked:
+        masked_query = urlencode(query, doseq=True)
+        return f"{parsed.path}?{masked_query}" if masked_query else parsed.path
+    else:
+        return url  # Không có gì cần mask, in nguyên gốc
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        masked_url = mask_sensitive_info(str(request.url))
+        print(f"{request.method} {masked_url}")
+        response = await call_next(request)
+        return response
+
+app.add_middleware(LoggingMiddleware)
+
 cache = TTLCache(maxsize=1000, ttl=3000)  # 2 tiếng
 lock = Lock()
 
@@ -50,7 +77,7 @@ def appendToRow(myDict: dict, key: str, value: str):
   myDict[key] = value
     
 def getdata(token: str):
-  print(f'#{get_current_time_str()}')
+  print(f'#{get_current_time_str()} Getting Stores')
   raw_rows = []
   for skipp in range(0,30001,150):
     url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
@@ -104,9 +131,45 @@ def getdata(token: str):
     else:
       return f'Error: {response.status_code} {response.text}'
   dunique = dedup_large_dict_list(raw_rows)
-  print (f"Total {len(dunique)} rows") 
+  print (f"#{get_current_time_str()} Got {len(dunique)} Rows") 
   return dunique
 
+def getleads(token: str):
+    print (f"#{get_current_time_str()} Getting Leads") 
+    raw_rows = []
+    url = f"https://api-admin.oplacrm.com/api/public/leads"
+    headers = {
+        "Authorization": token
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        sources = response.json()
+        included_keys = ["account_name","name","id","created_at","custom_field_lead_values","owner"]
+        for index, item in enumerate(sources):
+            row = {}
+            for key, value in item.items():
+                if key =="custom_field_lead_values":
+                    for i in value:
+                        appendToRow(row, f'{i["custom_field"]["name"]}',i["value"])
+                elif key == "account_name":
+                    # print(value)
+                    appendToRow(row, 'store_lead',value)
+                elif key == "name":
+                    appendToRow(row, 'contact_name',value)
+                elif key == "id":
+                    appendToRow(row, 'lead_id',value)
+                elif key == "created_at":
+                    appendToRow(row, 'created_at',value[:10])
+                elif key == "owner":
+                    appendToRow(row, 'owner',value['full_name'])
+                    appendToRow(row, 'owner_id',value['external_id'])
+            raw_rows.append(row)
+    else:
+        return f'Error: {response.status_code} {response.text}'
+    dunique = dedup_large_dict_list(raw_rows)
+    print (f"#{get_current_time_str()} Got {len(dunique)} Rows") 
+    return dunique
+  
 @app.get("/")
 def home():
   return {"hello":"Chúc sếp ngày mới vui vẻ :)"}
