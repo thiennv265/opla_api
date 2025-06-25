@@ -170,24 +170,48 @@ def home():
   return {"hello":"Chúc sếp ngày mới vui vẻ :)"}
 
 @app.get("/opla/")
-def api_opla(token: str = Query(...), secrets: str = Query(...)):
-  if secrets == 'chucm@ym@n8686':
-    with lock:
-      if token not in cache:
-        cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads: ": getleads(token)}
-      return cache[token]["data"]
-  else:
-    return {"Lỗi": "Sai secrets :("}
+def api_opla(
+    token: str = Query(...),
+    secrets: str = Query(...),
+    fields: List[str] = Query(None)
+):
+    if secrets == 'chucm@ym@n8686':
+        with lock:
+            if token not in cache:
+                cache[token] = {
+                    "data": getdata(token),
+                    "updated": get_current_time_str(),
+                    "leads": getleads(token)
+                }
+            df = pd.DataFrame(cache[token]["data"])
+            if fields:
+                valid_fields = [col for col in fields if col in df.columns]
+                df = df[valid_fields]
+            return df.to_dict(orient="records")
+    else:
+        return {}  # Không báo lỗi, trả rỗng
 
 @app.get("/leads/")
-def api_lead(token: str = Query(...), secrets: str = Query(...)):
-  if secrets == 'chucm@ym@n8686':
-    with lock:
-      if token not in cache:
-        cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads": getleads(token)}
-      return cache[token]["leads"]
-  else:
-    return {"Lỗi": "Sai secrets :("}
+def api_lead(
+    token: str = Query(...),
+    secrets: str = Query(...),
+    fields: List[str] = Query(None)
+):
+    if secrets == 'chucm@ym@n8686':
+        with lock:
+            if token not in cache:
+                cache[token] = {
+                    "data": getdata(token),
+                    "updated": get_current_time_str(),
+                    "leads": getleads(token)
+                }
+            df = pd.DataFrame(cache[token]["leads"])
+            if fields:
+                valid_fields = [col for col in fields if col in df.columns]
+                df = df[valid_fields]
+            return df.to_dict(orient="records")
+    else:
+        return {}
 
 @app.get("/now/")
 def api_now(token: str = Query(...), secrets: str = Query(...)):
@@ -217,33 +241,80 @@ async def last_update(token: str = Query(...)):
       return {"updated": "N/A"}
 
 @app.get("/opla/excel")
-def download_excel(token: str = Query(...), secrets: str = Query(...)):
-  if secrets != 'chucm@ym@n8686':
-    return {"Lỗi": "Sai secrets :("}
-  with lock:
-    if token not in cache:
-      cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads": getleads(token)}
-    df = pd.DataFrame(cache[token]["data"])
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-      df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
-      output.seek(0)
-      headers = {"Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx",
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
-    return Response(content=output.read(), media_type=headers["Content-Type"], headers=headers)
+def download_excel(
+    token: str = Query(...),
+    secrets: str = Query(...),
+    fields: List[str] = Query(None)  # 👈 Thêm vào đây
+):
+    if secrets != 'chucm@ym@n8686':
+        return {"Lỗi": "Sai secrets :("}
+
+    with lock:
+        if token not in cache:
+            cache[token] = {
+                "data": getdata(token),
+                "updated": get_current_time_str(),
+                "leads": getleads(token)
+            }
+
+        df = pd.DataFrame(cache[token]["data"])
+
+        # 👇 Lọc theo fields nếu được cung cấp
+        if fields:
+            valid_fields = [col for col in fields if col in df.columns]
+            df = df[valid_fields]
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
+
+        output.seek(0)
+        headers = {
+            "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
+        }
+
+        return Response(
+            content=output.read(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers
+        )
 
 @app.get("/leads/excel")
-def download_excel(token: str = Query(...), secrets: str = Query(...)):
-  if secrets != 'chucm@ym@n8686':
-    return {"Lỗi": "Sai secrets :("}
-  with lock:
-    if token not in cache:
-      cache[token] = {"data": getdata(token), "updated": get_current_time_str(), "leads": getleads(token)}
-    df = pd.DataFrame(cache[token]["leads"])
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-      df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
-      output.seek(0)
-      headers = {"Content-Disposition": f"attachment; filename=leads_{get_current_time_str()}.xlsx",
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
-    return Response(content=output.read(), media_type=headers["Content-Type"], headers=headers)
+def download_excel(
+    token: str = Query(...),
+    secrets: str = Query(...),
+    fields: List[str] = Query(None)  # 👈 Thêm param lọc cột
+):
+    if secrets != 'chucm@ym@n8686':
+        return {"Lỗi": "Sai secrets :("}
+
+    with lock:
+        if token not in cache:
+            cache[token] = {
+                "data": getdata(token),
+                "updated": get_current_time_str(),
+                "leads": getleads(token)
+            }
+
+        df = pd.DataFrame(cache[token]["leads"])
+
+        # 👇 Lọc cột nếu có fields
+        if fields:
+            valid_fields = [col for col in fields if col in df.columns]
+            df = df[valid_fields]
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
+
+        output.seek(0)
+
+        headers = {
+            "Content-Disposition": f"attachment; filename=leads_{get_current_time_str()}.xlsx"
+        }
+
+        return Response(
+            content=output.read(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers
+        )
