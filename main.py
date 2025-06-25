@@ -174,6 +174,8 @@ def api_opla(
             if fields:
                 valid_fields = [col for col in fields if col in df.columns]
                 df = df[valid_fields]
+            df.replace([np.inf, -np.inf], np.nan, inplace=True)
+            df = df.where(pd.notnull(df), None)
             return df.to_dict(orient="records")
     else:
         return {}  # Không báo lỗi, trả rỗng
