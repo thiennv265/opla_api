@@ -10,7 +10,7 @@ def install_if_missing(package):
 # Cần kiểm tra và cài các thư viện ngoài
 for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl" ]:
   install_if_missing(pkg)
-
+from typing import List
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import openpyxl
