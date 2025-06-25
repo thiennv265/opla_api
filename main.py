@@ -1,6 +1,6 @@
 import subprocess
 import io
-import sys
+import sys, time
 
 def install_if_missing(package):
   try:
@@ -18,14 +18,68 @@ import requests
 import json
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, Query, Response, Request
+from fastapi import FastAPI, Query, Response, Request, HTTPException
 from datetime import datetime, timezone, timedelta
 from cachetools import TTLCache
 from threading import Lock
 
+import logging
+import re
 app = FastAPI(docs_url = None, redoc_url = None, openapi_url = None)
 cache = TTLCache(maxsize=1000, ttl=3000)  # 2 tiếng
 lock = Lock()
+
+# Logger riêng (hoặc dùng uvicorn.access nếu muốn)
+logger = logging.getLogger("masked.access")
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+def mask_query_params(url: str, keys=("token", "secrets")) -> str:
+    for key in keys:
+        pattern = rf"({key}=)([^&\s]+)"
+        url = re.sub(pattern, lambda m: m.group(1) + mask_half(m.group(2)), url)
+    return url
+
+def mask_half(value: str) -> str:
+    if len(value) < 4:
+        return "***"
+    half = len(value) // 2
+    return value[:half] + "*" * (len(value) - half)
+
+def json_size(data):
+    json_bytes = json.dumps(data).encode("utf-8")
+    size_mb = len(json_bytes) / (1024 * 1024)
+    return f"{size_mb:.1f} MB"
+
+def color_status(status_code: int) -> str:
+    if 200 <= status_code < 300:
+        return f"\033[92m{status_code}\033[0m"  # xanh lá
+    elif 300 <= status_code < 400:
+        return f"\033[96m{status_code}\033[0m"  # cyan
+    elif 400 <= status_code < 500:
+        return f"\033[93m{status_code}\033[0m"  # vàng
+    else:
+        return f"\033[91m{status_code}\033[0m"  # đỏ
+        
+@app.middleware("http")
+async def log_masked_requests(request: Request, call_next):
+    start = time.time()
+    client_ip = request.client.host
+    method = request.method
+    url = str(request.url)
+    masked_url = mask_query_params(url)
+
+    response = await call_next(request)
+
+    status_code = response.status_code
+    duration_ms = time.time() - start
+
+    logger.info(f"{client_ip} - {method} {masked_url} - {color_status(status_code)} - {duration_ms:.2f}s")
+    return response
+
 
 # Lấy giờ GMT+7
 def get_current_time_str():
@@ -52,11 +106,11 @@ def appendToRow(myDict: dict, key: str, value: str):
     
 def getdata(token: str):
     try:
-        print(f'#{get_current_time_str()} Getting Stores')
+        sta = get_current_time_str()
         raw_rows = []
         for skipp in range(0,30001,150):
-            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
-            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
+            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
+            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
             headers = {"Authorization": token}
             response = requests.get(url, headers=headers, verify = False)
             if response.status_code == 200:
@@ -108,14 +162,15 @@ def getdata(token: str):
               return f'Error: {response.status_code} {response.text}'
             if len(sources) < 160: break
         dunique = dedup_large_dict_list(raw_rows)
-        print (f"#{get_current_time_str()} Got {len(dunique)} Rows") 
+        sto = get_current_time_str()
+        print (f"   {sta} -> {sto}: {json_size(sources)} - {len(dunique)} store records") 
         return dunique
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
 def getleads(token: str):
     try:
-        print (f"#{get_current_time_str()} Getting Leads") 
+        sta = get_current_time_str()
         raw_rows = []
         url = f"https://api-admin.oplacrm.com/api/public/leads?take=100000"
         headers = {
@@ -147,7 +202,8 @@ def getleads(token: str):
         else:
             return f'Error: {response.status_code} {response.text}'
         dunique = dedup_large_dict_list(raw_rows)
-        print (f"#{get_current_time_str()} Got {len(dunique)} Rows") 
+        sto = get_current_time_str()
+        print (f"   {sta} -> {sto}: {json_size(sources)} - {len(dunique)} store records") 
         return dunique
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
