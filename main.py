@@ -101,8 +101,8 @@ def getdata(token: str):
                                         vl = i["value"]
                                   if n not in excluded_keys_mex:
                                     appendToRow(row, f'mex_info_{n}',vl)
-                                  # else:
-                                    # appendToRow(row, f'mex_{k}',v)
+                              else:
+                                appendToRow(row, f'mex_{k}',v)
                     raw_rows.append(row)
             else:
               return f'Error: {response.status_code} {response.text}'
@@ -222,7 +222,7 @@ async def last_update(token: str = Query(...)):
     if token in cache:
       return {"updated": cache[token]["updated"]}
     else:
-      return {"updated": "N/A"}
+      return {"updated": "N/A 👈"}
 
 @app.get("/opla/excel/")
 def download_excel(
