@@ -8,7 +8,7 @@ def install_if_missing(package):
   except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 # Cần kiểm tra và cài các thư viện ngoài
-for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl", "numpy" ]:
+for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl", "numpy", "simplejson"]:
   install_if_missing(pkg)
 from typing import List
 import urllib3
@@ -22,18 +22,31 @@ from fastapi import FastAPI, Query, Response, Request, HTTPException
 from datetime import datetime, timezone, timedelta
 from cachetools import TTLCache
 from threading import Lock
-
+from fastapi.responses import JSONResponse
+import simplejson as json
 import logging
 import re
 app = FastAPI(docs_url = None, redoc_url = None, openapi_url = None)
 cache = TTLCache(maxsize=1000, ttl=3000)  # 2 tiếng
 lock = Lock()
 
+# Lấy giờ GMT+7
+def get_current_time_str():
+  tz_gmt7 = timezone(timedelta(hours=7))
+  now = datetime.now(tz_gmt7)
+  return now.strftime('%Y%m%d_%H%M%S')
+  
+class CustomFormatter(logging.Formatter):
+    YELLOW = "\033[93m"
+    RESET = "\033[0m"
+    def formatTime(self, record, datefmt=None):
+        return f"{self.YELLOW}{get_current_time_str()}{self.RESET}"
+
 # Logger riêng (hoặc dùng uvicorn.access nếu muốn)
 logger = logging.getLogger("masked.access")
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(message)s')
+formatter = CustomFormatter('%(asctime)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
@@ -63,7 +76,7 @@ def color_status(status_code: int) -> str:
         return f"\033[93m{status_code}\033[0m"  # vàng
     else:
         return f"\033[91m{status_code}\033[0m"  # đỏ
-        
+
 @app.middleware("http")
 async def log_masked_requests(request: Request, call_next):
     start = time.time()
@@ -77,15 +90,8 @@ async def log_masked_requests(request: Request, call_next):
     status_code = response.status_code
     duration_ms = time.time() - start
 
-    logger.info(f"{client_ip} - {method} {masked_url} - {color_status(status_code)} - {duration_ms:.2f}s")
+    logger.info(f"\033[91m{client_ip}\033[0m - {method} {masked_url} - {color_status(status_code)} - {duration_ms:.2f}s")
     return response
-
-
-# Lấy giờ GMT+7
-def get_current_time_str():
-  tz_gmt7 = timezone(timedelta(hours=7))
-  now = datetime.now(tz_gmt7)
-  return now.strftime('%Y%m%d_%H%M%S')
 
 def dedup_large_dict_list(data: list[dict]) -> list[dict]:
   seen = set()
@@ -108,6 +114,7 @@ def getdata(token: str):
     try:
         sta = get_current_time_str()
         raw_rows = []
+        total_bytes = 0
         for skipp in range(0,30001,150):
             # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
             url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
@@ -115,11 +122,13 @@ def getdata(token: str):
             response = requests.get(url, headers=headers, verify = False)
             if response.status_code == 200:
                 sources = response.json()
+                size = len(json.dumps(sources).encode('utf-8'))  # tính size theo byte
+                total_bytes += size
                 excluded_keys = ["weight","area","google_map_address","description","stage_compact","amount", "invoice", "invoices", "opportunity_process",
                                "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","owner_id","opportunities_products",
                                "locked","date_closed_actual","discussions","is_parent","source","opportunity_status","project_type","opportunities_contacts",
                                "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities",
-                               "stage_logs"]
+                               "stage_logs","date_open"]
                 special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities"]
                 for index, item in enumerate(sources):
                     row = {}
@@ -163,7 +172,7 @@ def getdata(token: str):
             if len(sources) < 160: break
         dunique = dedup_large_dict_list(raw_rows)
         sto = get_current_time_str()
-        print (f"   {sta} -> {sto}: {json_size(sources)} - {len(dunique)} store records") 
+        print (f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(dunique)} store records") 
         return dunique
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
@@ -172,6 +181,7 @@ def getleads(token: str):
     try:
         sta = get_current_time_str()
         raw_rows = []
+        total_bytes = 0
         url = f"https://api-admin.oplacrm.com/api/public/leads?take=100000"
         headers = {
             "Authorization": token
@@ -179,6 +189,8 @@ def getleads(token: str):
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             sources = response.json()
+            size = len(json.dumps(sources).encode('utf-8'))  # tính size theo byte
+            total_bytes += size
             included_keys = ["account_name","name","id","created_at","custom_field_lead_values","owner"]
             for index, item in enumerate(sources):
                 row = {}
@@ -203,46 +215,62 @@ def getleads(token: str):
             return f'Error: {response.status_code} {response.text}'
         dunique = dedup_large_dict_list(raw_rows)
         sto = get_current_time_str()
-        print (f"   {sta} -> {sto}: {json_size(sources)} - {len(dunique)} store records") 
+        print (f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(dunique)} lead records") 
         return dunique
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
         
 @app.get("/")
 def home():
-  return {"hello":"Chúc sếp ngày mới vui vẻ :)"}
+  return {"hello":":)"}
 
 @app.get("/opla/")
 def api_opla(
     token: str = Query(...),
     secrets: str = Query(...),
-    fields: List[str] = Query(None)
+    fields: List[str] = Query(None),
+    limit: int = Query(None)
 ):
-    if secrets == 'chucm@ym@n8686':
-        with lock:
-            if token not in cache:
-                cache[token] = {
-                    "data": getdata(token),
-                    "updated": get_current_time_str(),
-                    "leads": getleads(token)
-                }
-            df = pd.DataFrame(cache[token]["data"])
-            if fields:
-                valid_fields = [col for col in fields if col in df.columns]
-                df = df[valid_fields]
-            df.replace([np.inf, -np.inf], np.nan, inplace=True)
-            df = df.where(pd.notnull(df), None)
-            return df.to_dict(orient="records")
-    else:
-        return {}  # Không báo lỗi, trả rỗng
+    try:
+        if secrets == 'chucm@ym@n8686':
+            with lock:
+                if token not in cache:
+                    cache[token] = {
+                        "data": getdata(token),
+                        "updated": get_current_time_str(),
+                        "leads": getleads(token)
+                    }
 
+                df = pd.DataFrame(cache[token]["data"])
+
+                if limit:
+                    df = df.iloc[:limit]
+                if fields:
+                    valid_fields = [col for col in fields if col in df.columns]
+                    df = df[valid_fields]
+
+                df = df.replace([np.inf, -np.inf], np.nan)
+                df = df.where(pd.notnull(df), None)
+
+                safe_json = json.dumps(
+                    df.to_dict(orient="records"),
+                    ignore_nan=True
+                )
+                return Response(content=safe_json, media_type="application/json")
+        else:
+            return {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
+        
 @app.get("/leads/")
 def api_lead(
     token: str = Query(...),
     secrets: str = Query(...),
-    fields: List[str] = Query(None)
+    fields: List[str] = Query(None),
+    limit: int = Query(None)
 ):
-    if secrets == 'chucm@ym@n8686':
+    try:
+        if secrets != 'chucm@ym@n8686': return {}
         with lock:
             if token not in cache:
                 cache[token] = {
@@ -251,16 +279,16 @@ def api_lead(
                     "leads": getleads(token)
                 }
             df = pd.DataFrame(cache[token]["leads"])
-            
-            if fields:
-                valid_fields = [col for col in fields if col in df.columns]
-                if valid_fields:
-                    df = df[valid_fields]
+            if fields: df = df[[col for col in fields if col in df.columns]]
+            if limit: df = df.iloc[:limit]
             df.replace([np.inf, -np.inf], np.nan, inplace=True)
             df = df.where(pd.notnull(df), None)
-            return df.to_dict(orient="records")
-    else:
-        return {}
+            return Response(
+                content=json.dumps(df.to_dict(orient="records"), ignore_nan=True),
+                media_type="application/json"
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
 @app.get("/clear/")
 def api_clear(token: str = Query(...), secrets: str = Query(...)):
