@@ -6,7 +6,7 @@ def install_if_missing(package):
   try:
     __import__(package)
   except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--break-system-packages"])
 # Cần kiểm tra và cài các thư viện ngoài
 for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl", "numpy", "simplejson"]:
   install_if_missing(pkg)
