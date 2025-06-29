@@ -8,7 +8,7 @@ def install_if_missing(package):
   except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--break-system-packages"])
 # Cần kiểm tra và cài các thư viện ngoài
-for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl", "numpy", "simplejson"]:
+for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl", "numpy", "simplejson", "openpyxl"]:
   install_if_missing(pkg)
 from typing import List
 import urllib3
