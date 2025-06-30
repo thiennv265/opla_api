@@ -18,6 +18,7 @@ import requests
 import json
 import numpy as np
 import pandas as pd
+pd.set_option('future.no_silent_downcasting', True)
 from fastapi import FastAPI, Query, Response, Request, HTTPException
 from datetime import datetime, timezone, timedelta
 from cachetools import TTLCache
@@ -85,12 +86,9 @@ async def log_masked_requests(request: Request, call_next):
     method = request.method
     url = str(request.url)
     masked_url = mask_query_params(url)
-
     response = await call_next(request)
-
     status_code = response.status_code
     duration_ms = time.time() - start
-
     logger.info(f"\033[91m{client_ip}\033[0m - {method} {masked_url} - {color_status(status_code)} - {duration_ms:.2f}s")
     return response
 
