@@ -80,7 +80,8 @@ def color_status(status_code: int) -> str:
 @app.middleware("http")
 async def log_masked_requests(request: Request, call_next):
     start = time.time()
-    client_ip = request.client.host
+    # client_ip = request.client.host
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()
     method = request.method
     url = str(request.url)
     masked_url = mask_query_params(url)
