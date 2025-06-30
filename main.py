@@ -139,7 +139,8 @@ def getdata(token: str):
                           appendToRow(row, f'store_{key}',value)
                         elif key =="custom_field_opportunity_values":
                           for i in value:
-                            appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
+                            if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *"]:
+                              appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
                         elif key == "opportunity_process_stage":
                           appendToRow(row, f'store_{key}',value["opportunity_stage"]["name"])
                         elif key == "owner":
