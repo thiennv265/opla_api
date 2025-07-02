@@ -450,30 +450,33 @@ def api_checkdup(
     try:
         if secrets != 'chucm@ym@n8686': return {}
         with lock:
-            if token not in cache:
+            if token not in cache or (token in cache and ):
                 cache[token] = {
                     "data": getdata(token),
                     "updated": get_current_time_str(),
                     "leads": getleads(token)
                 }
-            df = pd.DataFrame(cache[token]["data"])
-            df = df[["store_id","store_short_id","store_name","store_owner","store_created_at","store_6. Địa chỉ gian hàng *", "mex_short_id", "mex_name"]]
-            if rate:
-                df = analyze_duplicates(df,threshold=rate)
-            else:
-                df = analyze_duplicates(df)
-            df.replace([np.inf, -np.inf], np.nan, inplace=True)
-            df = df.where(pd.notnull(df), None)
-            if filter0 == 1: df = df[(df["Dup_Name"] > 0) | (df["Dup_Address"] > 0)]
+            if not cache[token]["checkdup"]:
+              df = pd.DataFrame(cache[token]["data"])
+              df = df[["store_id","store_short_id","store_name","store_owner","store_created_at","store_6. Địa chỉ gian hàng *", "mex_short_id", "mex_name"]]
+              if rate:
+                  df = analyze_duplicates(df,threshold=rate)
+              else:
+                  df = analyze_duplicates(df)
+              df.replace([np.inf, -np.inf], np.nan, inplace=True)
+              df = df.where(pd.notnull(df), None)
+              if filter0 == 1: df = df[(df["Dup_Name"] > 0) | (df["Dup_Address"] > 0)]
+              cache[token]["checkup"] = df
+          
             if not excel or excel != 1:
                 return Response(
-                    content=json.dumps(df.to_dict(orient="records"), ignore_nan=True),
+                    content=json.dumps(cache[token]["checkup"].to_dict(orient="records"), ignore_nan=True),
                     media_type="application/json"
                 )
             elif excel == 1:
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    df.to_excel(writer, index=False, sheet_name=get_current_time_str())
+                    cache[token]["checkup"].to_excel(writer, index=False, sheet_name=get_current_time_str())
 
                 output.seek(0)
                 headers = {
