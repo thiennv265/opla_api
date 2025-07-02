@@ -8,12 +8,14 @@ def install_if_missing(package):
   except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--break-system-packages"])
 # Cần kiểm tra và cài các thư viện ngoài
-for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl", "numpy", "simplejson", "openpyxl"]:
+for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl", "numpy", "simplejson", "openpyxl", "rapidfuzz", "tqdm"]:
   install_if_missing(pkg)
 from typing import List
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import openpyxl
+from rapidfuzz import fuzz, process
+from tqdm import tqdm
 import requests
 import json
 import numpy as np
@@ -50,6 +52,119 @@ handler = logging.StreamHandler()
 formatter = CustomFormatter('%(asctime)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+def analyze_duplicates(df, store_col="store_name", addr_col="store_6. Địa chỉ gian hàng *", threshold=99):
+    df = df.copy()
+    df[store_col] = df[store_col].astype(str)
+    df[addr_col] = df[addr_col].astype(str)
+
+    so_luong_trung_ten = []
+    so_luong_trung_diachi = []
+    chi_tiet_trung_ten = []
+    chi_tiet_trung_diachi = []
+
+    for i, row in df.iterrows():
+        current_id = row["store_short_id"]
+        current_store = row[store_col].lower()
+        current_addr = row[addr_col].lower()
+
+        matches_ten = []
+        matches_diachi = []
+
+        for j, cmp_row in df.iterrows():
+            if cmp_row["store_short_id"] == current_id:
+                continue
+
+            cmp_store = cmp_row[store_col].lower()
+            cmp_addr = cmp_row[addr_col].lower()
+
+            # Trùng tên
+            score_store = fuzz.token_sort_ratio(current_store, cmp_store)
+            if score_store >= threshold:
+                matches_ten.append(
+                    f"{{{cmp_row['store_owner']}, {cmp_row['store_created_at']}, {cmp_row['store_short_id']}, {cmp_row[store_col]}}}"
+                )
+
+            # Trùng địa chỉ
+            score_addr = fuzz.token_sort_ratio(current_addr, cmp_addr)
+            if score_addr >= threshold:
+                matches_diachi.append(
+                    f"{{{cmp_row['store_owner']}, {cmp_row['store_created_at']}, {cmp_row['store_short_id']}, {cmp_row[store_col]}, {cmp_row[addr_col]}}}"
+                )
+
+        so_luong_trung_ten.append(len(matches_ten))
+        chi_tiet_trung_ten.append(", ".join(matches_ten))
+
+        so_luong_trung_diachi.append(len(matches_diachi))
+        chi_tiet_trung_diachi.append(", ".join(matches_diachi))
+
+    # Gộp vào df gốc
+    df["Dup_Name"] = so_luong_trung_ten
+    df["Dup_Address"] = so_luong_trung_diachi
+    df["Detail_Address"] = chi_tiet_trung_diachi
+    df["Detail_Name"] = chi_tiet_trung_ten
+
+    return df
+
+def analyze_duplicates_optimized(df, store_col="store_name", addr_col="store_6. Địa chỉ gian hàng *", threshold=99):
+    df = df.copy()
+    df[store_col] = df[store_col].astype(str).str.lower()
+    df[addr_col] = df[addr_col].astype(str).str.lower()
+    df["store_short_id"] = df["store_short_id"].astype(str)
+
+    # Khởi tạo kết quả
+    df["Dup_Name"] = 0
+    df["Dup_Address"] = 0
+    df["Detail_Name"] = ""
+    df["Detail_Address"] = ""
+
+    store_list = df[store_col].tolist()
+    addr_list = df[addr_col].tolist()
+
+    tqdm.pandas(desc="🔍 Processing duplicates")
+
+    def get_matches(index, current_store, current_addr, current_id):
+        matches_ten = []
+        matches_diachi = []
+
+        for j in range(len(df)):
+            if j == index:
+                continue
+
+            cmp_id = df.iloc[j]["store_short_id"]
+            cmp_store = store_list[j]
+            cmp_addr = addr_list[j]
+
+            score_store = fuzz.token_sort_ratio(current_store, cmp_store)
+            if score_store >= threshold:
+                matches_ten.append(
+                    f"{{{df.iloc[j]['store_owner']}, {df.iloc[j]['store_created_at']}, {cmp_id}, {df.iloc[j][store_col]}}}"
+                )
+
+            score_addr = fuzz.token_sort_ratio(current_addr, cmp_addr)
+            if score_addr >= threshold:
+                matches_diachi.append(
+                    f"{{{df.iloc[j]['store_owner']}, {df.iloc[j]['store_created_at']}, {cmp_id}, {df.iloc[j][store_col]}, {df.iloc[j][addr_col]}}}"
+                )
+
+        return pd.Series([
+            len(matches_ten),
+            len(matches_diachi),
+            ", ".join(matches_ten),
+            ", ".join(matches_diachi)
+        ], index=["Dup_Name", "Dup_Address", "Detail_Name", "Detail_Address"])
+
+    # Apply có tiến độ
+    df[["Dup_Name", "Dup_Address", "Detail_Name", "Detail_Address"]] = df.progress_apply(
+        lambda row: get_matches(
+            row.name,
+            row[store_col],
+            row[addr_col],
+            row["store_short_id"]
+        ), axis=1
+    )
+
+    return df    
 
 def mask_query_params(url: str, keys=("token", "secrets")) -> str:
     for key in keys:
@@ -115,8 +230,8 @@ def getdata(token: str):
         raw_rows = []
         total_bytes = 0
         for skipp in range(0,30001,150):
-            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
-            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
+            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
+            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
             headers = {"Authorization": token}
             response = requests.get(url, headers=headers, verify = False)
             if response.status_code == 200:
@@ -128,13 +243,15 @@ def getdata(token: str):
                                "locked","date_closed_actual","discussions","is_parent","source","opportunity_status","project_type","opportunities_contacts",
                                "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities",
                                "stage_logs","date_open"]
-                special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities"]
+                special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities","created_at"]
                 for index, item in enumerate(sources):
                     row = {}
                     for key, value in item.items():
                       if key not in excluded_keys:
                         if key not in special_keys:
                           appendToRow(row, f'store_{key}',value)
+                        elif key == "created_at":
+                          appendToRow(row, f'store_{key}',value[:10])
                         elif key =="custom_field_opportunity_values":
                           for i in value:
                             if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *"]:
@@ -229,7 +346,8 @@ def api_opla(
     token: str = Query(...),
     secrets: str = Query(...),
     fields: List[str] = Query(None),
-    limit: int = Query(None)
+    limit: int = Query(None),
+    excel: int = Query(None)
 ):
     try:
         if secrets == 'chucm@ym@n8686':
@@ -251,12 +369,27 @@ def api_opla(
 
                 df = df.replace([np.inf, -np.inf], np.nan)
                 df = df.where(pd.notnull(df), None)
+                if not excel or excel != 1:
+                    safe_json = json.dumps(
+                        df.to_dict(orient="records"),
+                        ignore_nan=True
+                    )
+                    return Response(content=safe_json, media_type="application/json")
+                elif excel == 1:                   
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                        df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
 
-                safe_json = json.dumps(
-                    df.to_dict(orient="records"),
-                    ignore_nan=True
-                )
-                return Response(content=safe_json, media_type="application/json")
+                    output.seek(0)
+                    headers = {
+                        "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
+                    }
+
+                    return Response(
+                        content=output.read(),
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers=headers
+                    )
         else:
             return {}
     except Exception as e:
@@ -267,7 +400,8 @@ def api_lead(
     token: str = Query(...),
     secrets: str = Query(...),
     fields: List[str] = Query(None),
-    limit: int = Query(None)
+    limit: int = Query(None),
+    excel: int = Query(None)
 ):
     try:
         if secrets != 'chucm@ym@n8686': return {}
@@ -283,10 +417,74 @@ def api_lead(
             if limit: df = df.iloc[:limit]
             df.replace([np.inf, -np.inf], np.nan, inplace=True)
             df = df.where(pd.notnull(df), None)
-            return Response(
-                content=json.dumps(df.to_dict(orient="records"), ignore_nan=True),
-                media_type="application/json"
-            )
+            if not excel or excel != 1:
+                return Response(
+                    content=json.dumps(df.to_dict(orient="records"), ignore_nan=True),
+                    media_type="application/json"
+                )
+            elif excel == 1:
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                    df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
+
+                output.seek(0)
+                headers = {
+                    "Content-Disposition": f"attachment; filename=leads_{get_current_time_str()}.xlsx"
+                }
+                return Response(
+                    content=output.read(),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers=headers
+                )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
+
+@app.get("/checkdup/")
+def api_checkdup(
+    token: str = Query(...),
+    secrets: str = Query(...),
+    rate: int = Query(None),
+    excel: int = Query(None),
+    filter0: int = Query(None)
+):
+    try:
+        if secrets != 'chucm@ym@n8686': return {}
+        with lock:
+            if token not in cache:
+                cache[token] = {
+                    "data": getdata(token),
+                    "updated": get_current_time_str(),
+                    "leads": getleads(token)
+                }
+            df = pd.DataFrame(cache[token]["data"])
+            df = df[["store_id","store_short_id","store_name","store_owner","store_created_at","store_6. Địa chỉ gian hàng *", "mex_short_id", "mex_name"]]
+            if rate:
+                df = analyze_duplicates(df,threshold=rate)
+            else:
+                df = analyze_duplicates(df)
+            df.replace([np.inf, -np.inf], np.nan, inplace=True)
+            df = df.where(pd.notnull(df), None)
+            if filter0 == 1: df = df[(df["Dup_Name"] > 0) | (df["Dup_Address"] > 0)]
+            if not excel or excel != 1:
+                return Response(
+                    content=json.dumps(df.to_dict(orient="records"), ignore_nan=True),
+                    media_type="application/json"
+                )
+            elif excel == 1:
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                    df.to_excel(writer, index=False, sheet_name=get_current_time_str())
+
+                output.seek(0)
+                headers = {
+                    "Content-Disposition": f"attachment; filename=checkdup_{get_current_time_str()}.xlsx"
+                }
+
+                return Response(
+                    content=output.read(),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers=headers
+                )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
@@ -301,12 +499,22 @@ def api_clear(token: str = Query(...), secrets: str = Query(...)):
     return {"Lỗi": "Sai secrets :("}
 
 @app.get("/updated/")
-async def last_update(token: str = Query(...)):
+def last_update(token: str = Query(...)):
   with lock:
     if token in cache:
       return {"updated": cache[token]["updated"]}
     else:
-      return {"updated": "N/A 👈"}
+      try:
+          cache[token] = {
+                            "data": getdata(token),
+                            "updated": get_current_time_str(),
+                            "leads": getleads(token)
+                        }
+          return {"updated": cache[token]["updated"]}
+      except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
+
+
 
 @app.get("/opla/excel/")
 def download_excel(
