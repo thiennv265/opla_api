@@ -321,7 +321,7 @@ def getleads(token: str):
                     elif key == "name":
                         appendToRow(row, 'contact_name',value)
                     elif key == "phone":
-                        appendToRow(row, 'phone',f'0{value["number"]}')
+                        appendToRow(row, 'phone',f'0{value["phone"]}')
                     elif key == "id":
                         appendToRow(row, 'lead_id',value)
                     elif key == "created_at":
@@ -468,7 +468,7 @@ def api_checkdup(
               df.replace([np.inf, -np.inf], np.nan, inplace=True)
               df = df.where(pd.notnull(df), None)
               if filter0 == 1: df = df[(df["Dup_Name"] > 0) | (df["Dup_Address"] > 0)]
-              cache[token]["checkup"] = df
+              cache[token]["checkdup"] = df
           
             if not excel or excel != 1:
                 return Response(
