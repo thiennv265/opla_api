@@ -450,7 +450,7 @@ def api_checkdup(
     try:
         if secrets != 'chucm@ym@n8686': return {}
         with lock:
-            if token not in cache or (token in cache and ):
+            if token not in cache:
                 cache[token] = {
                     "data": getdata(token),
                     "updated": get_current_time_str(),
