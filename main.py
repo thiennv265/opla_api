@@ -308,7 +308,7 @@ def getleads(token: str):
             sources = response.json()
             size = len(json.dumps(sources).encode('utf-8'))  # tính size theo byte
             total_bytes += size
-            included_keys = ["account_name","name","id","created_at","custom_field_lead_values","owner"]
+            included_keys = ["account_name","name","id","created_at","custom_field_lead_values","owner","phone"]
             for index, item in enumerate(sources):
                 row = {}
                 for key, value in item.items():
@@ -320,6 +320,8 @@ def getleads(token: str):
                         appendToRow(row, 'store_lead',value)
                     elif key == "name":
                         appendToRow(row, 'contact_name',value)
+                    elif key == "phone":
+                        appendToRow(row, 'phone',f'0{value["number"]}')
                     elif key == "id":
                         appendToRow(row, 'lead_id',value)
                     elif key == "created_at":
@@ -456,7 +458,7 @@ def api_checkdup(
                     "updated": get_current_time_str(),
                     "leads": getleads(token)
                 }
-            if not cache[token]["checkdup"]:
+            if "checkdup" not in cache[token]:
               df = pd.DataFrame(cache[token]["data"])
               df = df[["store_id","store_short_id","store_name","store_owner","store_created_at","store_6. Địa chỉ gian hàng *", "mex_short_id", "mex_name"]]
               if rate:
