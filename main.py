@@ -20,7 +20,7 @@ import requests
 import json
 import numpy as np
 import pandas as pd
-pd.set_option('future.no_silent_downcasting', True)
+# pd.set_option('future.no_silent_downcasting', True)
 from fastapi import FastAPI, Query, Response, Request, HTTPException
 from datetime import datetime, timezone, timedelta
 from cachetools import TTLCache
@@ -222,8 +222,8 @@ def getdata(token: str):
         raw_logs = []
         total_bytes = 0
         for skipp in range(0,30001,150):
-            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
-            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
+            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
+            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
             headers = {"Authorization": token}
             response = requests.get(url, headers=headers, verify = False)
             if response.status_code == 200:
@@ -238,8 +238,6 @@ def getdata(token: str):
                 for index, item in enumerate(sources):
                     row = {}
                     row_log = {}
-                    appendToRow(row_log, f'store_id',item["id"])
-                    appendToRow(row_log, f'store_short_id',item["short_id"])
                     for key, value in item.items():
                       if key not in excluded_keys:
                         if key not in special_keys:
@@ -248,6 +246,8 @@ def getdata(token: str):
                           appendToRow(row, f'store_{key}',value[:10])
                         elif key == "stage_logs":
                           for i in value:
+                            appendToRow(row_log, f'store_id',item["id"])
+                            appendToRow(row_log, f'store_short_id',item["short_id"])
                             appendToRow(row_log, 'creator',i["creator"]["email"])
                             appendToRow(row_log, 'datetime', convert_utc_to_gmt7(i["created_at"]))
                             appendToRow(row_log, 'stage',i["new_stage"])
@@ -447,7 +447,7 @@ def api_logs(
 
                     output.seek(0)
                     headers = {
-                        "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
+                        "Content-Disposition": f"attachment; filename=logs_{get_current_time_str()}.xlsx"
                     }
 
                     return Response(
