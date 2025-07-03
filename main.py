@@ -264,15 +264,18 @@ def getdata(token: str):
                           appendToRow(row, f'store_{key}',value[0]["user"]["email"])
                         elif key == "accounts_opportunities":
                           for k, v in value[0]["account"].items():
-                            included_keys = ["id","name","short_id","account_type","owner","custom_field_account_values"]
+                            included_keys = ["id","name","short_id","account_type","owner","custom_field_account_values","tax_identification_number"]
                             if k in included_keys:
                               if k == "account_type":
                                 appendToRow(row, f'mex_info_{k}',v)
+                              elif k == "tax_identification_number":
+                                appendToRow(row, f'mex_info_tax_id',v)
                               elif k == "owner":
                                 appendToRow(row, f'mex_info_{k}',v["email"])
                               elif k == "custom_field_account_values":
                                 for k1 in v:
-                                  excluded_keys_mex = ["34. Link ảnh"]
+                                  excluded_keys_mex = ["34. Link ảnh","21. Phần mềm bán hàng *",	"28. Ghi chú trạng thái","27. Trạng thái ký kết *","29. Lý do Không Hợp Lệ",
+                                                       "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng","20. ADO","23. Giá món trung bình *"]
                                   n = k1["custom_field"]["name"]
                                   vl = k1["value"]
                                   if k1["custom_field"]["master_data_custom_fields"]:
@@ -518,84 +521,3 @@ def last_update(token: str = Query(...)):
           return {"updated": cache[token]["updated"]}
       except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
-
-
-
-@app.get("/opla/excel/")
-def download_excel(
-    token: str = Query(...),
-    secrets: str = Query(...),
-    fields: List[str] = Query(None)  # 👈 Thêm vào đây
-):
-    if secrets != 'chucm@ym@n8686':
-        return {"Lỗi": "Sai secrets :("}
-
-    with lock:
-        if token not in cache:
-            cache[token] = {
-                "data": getdata(token),
-                "updated": get_current_time_str(),
-                "leads": getleads(token)
-            }
-
-        df = pd.DataFrame(cache[token]["data"])
-
-        # 👇 Lọc theo fields nếu được cung cấp
-        if fields:
-            valid_fields = [col for col in fields if col in df.columns]
-            df = df[valid_fields]
-
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
-
-        output.seek(0)
-        headers = {
-            "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
-        }
-
-        return Response(
-            content=output.read(),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers=headers
-        )
-
-@app.get("/leads/excel/")
-def download_excel(
-    token: str = Query(...),
-    secrets: str = Query(...),
-    fields: List[str] = Query(None)  # 👈 Thêm param lọc cột
-):
-    if secrets != 'chucm@ym@n8686':
-        return {"Lỗi": "Sai secrets :("}
-
-    with lock:
-        if token not in cache:
-            cache[token] = {
-                "data": getdata(token),
-                "updated": get_current_time_str(),
-                "leads": getleads(token)
-            }
-
-        df = pd.DataFrame(cache[token]["leads"])
-
-        # 👇 Lọc cột nếu có fields
-        if fields:
-            valid_fields = [col for col in fields if col in df.columns]
-            df = df[valid_fields]
-
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
-
-        output.seek(0)
-
-        headers = {
-            "Content-Disposition": f"attachment; filename=leads_{get_current_time_str()}.xlsx"
-        }
-
-        return Response(
-            content=output.read(),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers=headers
-        )
