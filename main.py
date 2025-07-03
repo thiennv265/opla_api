@@ -246,11 +246,14 @@ def getdata(token: str):
                           appendToRow(row, f'store_{key}',value[:10])
                         elif key == "stage_logs":
                           for i in value:
+                            prrint(i)
                             appendToRow(row_log, f'store_id',item["id"])
                             appendToRow(row_log, f'store_short_id',item["short_id"])
-                            appendToRow(row_log, 'creator',i["creator"]["email"])
-                            appendToRow(row_log, 'datetime', convert_utc_to_gmt7(i["created_at"]))
-                            appendToRow(row_log, 'stage',i["new_stage"])
+                            appendToRow(row_log, f'creator',i["creator"]["email"])
+                            prrint(i["creator"]["email"])
+                            appendToRow(row_log, f'datetime', convert_utc_to_gmt7(i["created_at"]))
+                            appendToRow(row_log, f'stage',i["new_stage"])
+                            print(row_log)
                         elif key =="custom_field_opportunity_values":
                           for i in value:
                             if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *"]:
