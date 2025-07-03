@@ -29,16 +29,60 @@ from fastapi.responses import JSONResponse
 import simplejson as json
 import logging
 import re
-app = FastAPI(docs_url = None, redoc_url = None, openapi_url = None)
+
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+app = FastAPI(docs_url = "/docs/guide", redoc_url = None, openapi_url="/openapi.json")
 cache = TTLCache(maxsize=1000, ttl=3000)  # 2 tiếng
 lock = Lock()
 
+@app.exception_handler(StarletteHTTPException)
+async def custom_404_handler(request, exc):
+    if exc.status_code == 404:
+        return JSONResponse(status_code=404, content={"Here the error":"Stupid! 404"})
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc):
+    # Có thể log traceback tại đây
+    return JSONResponse(
+        status_code=500,
+        content={"Here the error": "Internal server error 500"}
+    )
+    
+from fastapi.exceptions import RequestValidationError
+from starlette.responses import JSONResponse
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=422,
+        content={"Here the error": "Double check. Please!"}
+    )
+    
 # Lấy giờ GMT+7
 def get_current_time_str():
   tz_gmt7 = timezone(timedelta(hours=7))
   now = datetime.now(tz_gmt7)
   return now.strftime('%Y%m%d_%H%M%S')
-  
+
+def convert_utc_to_gmt7(dt_str: str) -> str:
+    """
+    Chuyển chuỗi thời gian ISO UTC (có định dạng: 2025-06-26T05:09:58.660403+00:00)
+    sang định dạng tương ứng trong GMT+7.
+
+    Trả về chuỗi ISO format theo GMT+7.
+    """
+    try:
+        # Parse từ chuỗi có timezone UTC
+        dt_utc = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S.%f%z")
+        # Chuyển sang GMT+7
+        gmt7 = dt_utc.astimezone(timezone(timedelta(hours=7)))
+        return str(gmt7)
+    except Exception as e:
+        print(e)
+        raise ValueError(f"Không thể parse thời gian: {e}")
+      
 class CustomFormatter(logging.Formatter):
     YELLOW = "\033[93m"
     RESET = "\033[0m"
@@ -106,66 +150,6 @@ def analyze_duplicates(df, store_col="store_name", addr_col="store_6. Địa ch�
 
     return df
 
-def analyze_duplicates_optimized(df, store_col="store_name", addr_col="store_6. Địa chỉ gian hàng *", threshold=99):
-    df = df.copy()
-    df[store_col] = df[store_col].astype(str).str.lower()
-    df[addr_col] = df[addr_col].astype(str).str.lower()
-    df["store_short_id"] = df["store_short_id"].astype(str)
-
-    # Khởi tạo kết quả
-    df["Dup_Name"] = 0
-    df["Dup_Address"] = 0
-    df["Detail_Name"] = ""
-    df["Detail_Address"] = ""
-
-    store_list = df[store_col].tolist()
-    addr_list = df[addr_col].tolist()
-
-    tqdm.pandas(desc="🔍 Processing duplicates")
-
-    def get_matches(index, current_store, current_addr, current_id):
-        matches_ten = []
-        matches_diachi = []
-
-        for j in range(len(df)):
-            if j == index:
-                continue
-
-            cmp_id = df.iloc[j]["store_short_id"]
-            cmp_store = store_list[j]
-            cmp_addr = addr_list[j]
-
-            score_store = fuzz.token_sort_ratio(current_store, cmp_store)
-            if score_store >= threshold:
-                matches_ten.append(
-                    f"{{{df.iloc[j]['store_owner']}, {df.iloc[j]['store_created_at']}, {cmp_id}, {df.iloc[j][store_col]}}}"
-                )
-
-            score_addr = fuzz.token_sort_ratio(current_addr, cmp_addr)
-            if score_addr >= threshold:
-                matches_diachi.append(
-                    f"{{{df.iloc[j]['store_owner']}, {df.iloc[j]['store_created_at']}, {cmp_id}, {df.iloc[j][store_col]}, {df.iloc[j][addr_col]}}}"
-                )
-
-        return pd.Series([
-            len(matches_ten),
-            len(matches_diachi),
-            ", ".join(matches_ten),
-            ", ".join(matches_diachi)
-        ], index=["Dup_Name", "Dup_Address", "Detail_Name", "Detail_Address"])
-
-    # Apply có tiến độ
-    df[["Dup_Name", "Dup_Address", "Detail_Name", "Detail_Address"]] = df.progress_apply(
-        lambda row: get_matches(
-            row.name,
-            row[store_col],
-            row[addr_col],
-            row["store_short_id"]
-        ), axis=1
-    )
-
-    return df    
-
 def mask_query_params(url: str, keys=("token", "secrets")) -> str:
     for key in keys:
         pattern = rf"({key}=)([^&\s]+)"
@@ -221,6 +205,13 @@ def dedup_large_dict_list(data: list[dict]) -> list[dict]:
       unique.append(d)
   return unique
 
+def dedup_dicts_smart(data: list[dict]) -> list[dict]:
+    try:
+        return pd.DataFrame(data).drop_duplicates().to_dict(orient="records")
+    except Exception as e:
+        print(e)
+        # return dedup_large_dict_list(data)
+      
 def appendToRow(myDict: dict, key: str, value: str):
   myDict[key] = value
     
@@ -228,6 +219,7 @@ def getdata(token: str):
     try:
         sta = get_current_time_str()
         raw_rows = []
+        raw_logs = []
         total_bytes = 0
         for skipp in range(0,30001,150):
             url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
@@ -241,17 +233,24 @@ def getdata(token: str):
                 excluded_keys = ["weight","area","google_map_address","description","stage_compact","amount", "invoice", "invoices", "opportunity_process",
                                "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","owner_id","opportunities_products",
                                "locked","date_closed_actual","discussions","is_parent","source","opportunity_status","project_type","opportunities_contacts",
-                               "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities",
-                               "stage_logs","date_open"]
-                special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities","created_at"]
+                               "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities","date_open"]
+                special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities","created_at","stage_logs"]
                 for index, item in enumerate(sources):
                     row = {}
+                    row_log = {}
+                    appendToRow(row_log, f'store_id',item["id"])
+                    appendToRow(row_log, f'store_short_id',item["short_id"])
                     for key, value in item.items():
                       if key not in excluded_keys:
                         if key not in special_keys:
                           appendToRow(row, f'store_{key}',value)
                         elif key == "created_at":
                           appendToRow(row, f'store_{key}',value[:10])
+                        elif key == "stage_logs":
+                          for i in value:
+                            appendToRow(row_log, 'creator',i["creator"]["email"])
+                            appendToRow(row_log, 'datetime', convert_utc_to_gmt7(i["created_at"]))
+                            appendToRow(row_log, 'stage',i["new_stage"])
                         elif key =="custom_field_opportunity_values":
                           for i in value:
                             if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *"]:
@@ -287,14 +286,17 @@ def getdata(token: str):
                               else:
                                 appendToRow(row, f'mex_{k}',v)
                     raw_rows.append(row)
+                    raw_logs.append(row_log)
             else:
               return f'Error: {response.status_code} {response.text}'
             if len(sources) < 160: break
-        dunique = dedup_large_dict_list(raw_rows)
+        store_records = dedup_dicts_smart(raw_rows)
+        store_logs = dedup_dicts_smart(raw_logs)
         sto = get_current_time_str()
-        print (f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(dunique)} store records") 
-        return dunique
+        print (f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(store_records)} store records + {len(store_logs)} log records") 
+        return store_records, store_logs
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
 def getleads(token: str):
@@ -335,7 +337,7 @@ def getleads(token: str):
                 raw_rows.append(row)
         else:
             return f'Error: {response.status_code} {response.text}'
-        dunique = dedup_large_dict_list(raw_rows)
+        dunique = dedup_dicts_smart(raw_rows)
         sto = get_current_time_str()
         print (f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(dunique)} lead records") 
         return dunique
@@ -358,13 +360,71 @@ def api_opla(
         if secrets == 'chucm@ym@n8686':
             with lock:
                 if token not in cache:
+                    data, logs = getdata(token)
                     cache[token] = {
-                        "data": getdata(token),
+                        "data": data,
+                        "logs": logs,
                         "updated": get_current_time_str(),
                         "leads": getleads(token)
                     }
 
                 df = pd.DataFrame(cache[token]["data"])
+
+                if limit:
+                    df = df.iloc[:limit]
+                if fields:
+                    valid_fields = [col for col in fields if col in df.columns]
+                    df = df[valid_fields]
+
+                df = df.replace([np.inf, -np.inf], np.nan)
+                df = df.where(pd.notnull(df), None)
+                if not excel or excel != 1:
+                    safe_json = json.dumps(
+                        df.to_dict(orient="records"),
+                        ignore_nan=True
+                    )
+                    return Response(content=safe_json, media_type="application/json")
+                elif excel == 1:                   
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                        df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
+
+                    output.seek(0)
+                    headers = {
+                        "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
+                    }
+
+                    return Response(
+                        content=output.read(),
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers=headers
+                    )
+        else:
+            return {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
+
+@app.get("/logs/")
+def api_logs(
+    token: str = Query(...),
+    secrets: str = Query(...),
+    fields: List[str] = Query(None),
+    limit: int = Query(None),
+    excel: int = Query(None)
+):
+    try:
+        if secrets == 'chucm@ym@n8686':
+            with lock:
+                if token not in cache:
+                    data, logs = getdata(token)
+                    cache[token] = {
+                        "data": data,
+                        "logs": logs,
+                        "updated": get_current_time_str(),
+                        "leads": getleads(token)
+                    }
+
+                df = pd.DataFrame(cache[token]["logs"])
 
                 if limit:
                     df = df.iloc[:limit]
