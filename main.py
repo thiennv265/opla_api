@@ -231,7 +231,7 @@ def getdata(token: str):
                         elif key == "created_at":
                           appendToRow(row, f'store_{key}',value[:10])
                         elif key == "stage_logs":
-                          print(len(value))
+                          # print(len(value))
                           for i in value:
                             row_log = {}
                             appendToRow(row_log, f'store_id',item["id"])
@@ -356,8 +356,7 @@ def api_opla(
                         "leads": getleads(token)
                     }
 
-                # df = pd.DataFrame(cache[token]["data"])
-                df = cache[token]["data"]
+                df = pd.DataFrame(cache[token]["data"])
 
                 if limit:
                     df = df.iloc[:limit]
@@ -413,7 +412,7 @@ def api_logs(
                         "leads": getleads(token)
                     }
 
-                df = cache[token]["logs"]
+                df = pd.DataFrame(cache[token]["logs"])
 
                 if limit:
                     df = df.iloc[:limit]
