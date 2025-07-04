@@ -191,23 +191,10 @@ async def log_masked_requests(request: Request, call_next):
     logger.info(f"\033[91m{client_ip}\033[0m - {method} {masked_url} - {color_status(status_code)} - {duration_ms:.2f}s")
     return response
 
-def dedup_large_dict_list(data: list[dict]) -> list[dict]:
-  seen = set()
-  unique = []
-  for d in data:
-# Dùng tuple(sorted(...)) nếu có thể, fallback sang str(...) nếu lỗi
-    try:
-      key = tuple(sorted((k, str(v)) for k, v in d.items()))
-    except Exception:
-      key = str(sorted(d.items()))
-    if key not in seen:
-      seen.add(key)    
-      unique.append(d)
-  return unique
-
 def dedup_dicts_smart(data: list[dict]) -> list[dict]:
     try:
-        return pd.DataFrame(data).drop_duplicates().to_dict(orient="records")
+        # return pd.DataFrame(data).drop_duplicates().to_dict(orient="records")
+        return pd.DataFrame(data).drop_duplicates()
     except Exception as e:
         print(e)
         # return dedup_large_dict_list(data)
@@ -237,7 +224,6 @@ def getdata(token: str):
                 special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities","created_at","stage_logs"]
                 for index, item in enumerate(sources):
                     row = {}
-                    row_log = {}
                     for key, value in item.items():
                       if key not in excluded_keys:
                         if key not in special_keys:
@@ -245,15 +231,15 @@ def getdata(token: str):
                         elif key == "created_at":
                           appendToRow(row, f'store_{key}',value[:10])
                         elif key == "stage_logs":
+                          print(len(value))
                           for i in value:
-                            prrint(i)
+                            row_log = {}
                             appendToRow(row_log, f'store_id',item["id"])
                             appendToRow(row_log, f'store_short_id',item["short_id"])
                             appendToRow(row_log, f'creator',i["creator"]["email"])
-                            prrint(i["creator"]["email"])
                             appendToRow(row_log, f'datetime', convert_utc_to_gmt7(i["created_at"]))
                             appendToRow(row_log, f'stage',i["new_stage"])
-                            print(row_log)
+                            raw_logs.append(row_log)
                         elif key =="custom_field_opportunity_values":
                           for i in value:
                             if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *"]:
@@ -289,7 +275,6 @@ def getdata(token: str):
                               else:
                                 appendToRow(row, f'mex_{k}',v)
                     raw_rows.append(row)
-                    raw_logs.append(row_log)
             else:
               return f'Error: {response.status_code} {response.text}'
             if len(sources) < 160: break
@@ -371,7 +356,8 @@ def api_opla(
                         "leads": getleads(token)
                     }
 
-                df = pd.DataFrame(cache[token]["data"])
+                # df = pd.DataFrame(cache[token]["data"])
+                df = cache[token]["data"]
 
                 if limit:
                     df = df.iloc[:limit]
@@ -427,7 +413,7 @@ def api_logs(
                         "leads": getleads(token)
                     }
 
-                df = pd.DataFrame(cache[token]["logs"])
+                df = cache[token]["logs"]
 
                 if limit:
                     df = df.iloc[:limit]
