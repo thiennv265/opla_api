@@ -20,7 +20,7 @@ import requests
 import json
 import numpy as np
 import pandas as pd
-# pd.set_option('future.no_silent_downcasting', True)
+pd.set_option('future.no_silent_downcasting', True)
 from fastapi import FastAPI, Query, Response, Request, HTTPException
 from datetime import datetime, timezone, timedelta
 from cachetools import TTLCache
@@ -33,7 +33,7 @@ import re
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app = FastAPI(docs_url = "/docs/guide", redoc_url = None, openapi_url="/openapi.json")
-cache = TTLCache(maxsize=1000, ttl=3000)  # 2 tiếng
+cache = TTLCache(maxsize=1000, ttl=1000)  # 2 tiếng
 lock = Lock()
 
 @app.exception_handler(StarletteHTTPException)
@@ -242,7 +242,8 @@ def getdata(token: str):
                             raw_logs.append(row_log)
                         elif key =="custom_field_opportunity_values":
                           for i in value:
-                            if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *"]:
+                            if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *","Quận (cũ)",
+                                                                 "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng"]:
                               appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
                         elif key == "opportunity_process_stage":
                           appendToRow(row, f'store_{key}',value["opportunity_stage"]["name"])
@@ -263,7 +264,9 @@ def getdata(token: str):
                               elif k == "custom_field_account_values":
                                 for k1 in v:
                                   excluded_keys_mex = ["34. Link ảnh","21. Phần mềm bán hàng *",	"28. Ghi chú trạng thái","27. Trạng thái ký kết *","29. Lý do Không Hợp Lệ",
-                                                       "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng","20. ADO","23. Giá món trung bình *"]
+                                                       "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng","20. ADO","23. Giá món trung bình *","24. Link gian hàng SPF",
+                                                      "25. Link gian hàng GF", "m27. Link gian hàng Google Review","33. Link gian hàng BeF","account_type"
+                                                      ]
                                   n = k1["custom_field"]["name"]
                                   vl = k1["value"]
                                   if k1["custom_field"]["master_data_custom_fields"]:
@@ -544,12 +547,17 @@ def api_checkdup(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
-@app.get("/clear/")
+@app.get("/f5/")
 def api_clear(token: str = Query(...), secrets: str = Query(...)):
   if secrets == 'chucm@ym@n8686':
     with lock:
       if token in cache:
         del cache[token]
+        cache[token] = {
+                    "data": getdata(token),
+                    "updated": get_current_time_str(),
+                    "leads": getleads(token)
+                }
         return {'result': 'OK :)'}
   else:
     return {"Lỗi": "Sai secrets :("}
