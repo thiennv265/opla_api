@@ -33,7 +33,7 @@ import re
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app = FastAPI(docs_url = "/docs/guide", redoc_url = None, openapi_url="/openapi.json")
-cache = TTLCache(maxsize=1000, ttl=1000)  # 2 tiếng
+cache = TTLCache(maxsize=1000, ttl=2500)  # 2 tiếng
 lock = Lock()
 
 @app.exception_handler(StarletteHTTPException)
@@ -209,8 +209,8 @@ def getdata(token: str):
         raw_logs = []
         total_bytes = 0
         for skipp in range(0,30001,150):
-            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
-            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
+            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
+            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
             headers = {"Authorization": token}
             response = requests.get(url, headers=headers, verify = False)
             if response.status_code == 200:
@@ -265,8 +265,7 @@ def getdata(token: str):
                                 for k1 in v:
                                   excluded_keys_mex = ["34. Link ảnh","21. Phần mềm bán hàng *",	"28. Ghi chú trạng thái","27. Trạng thái ký kết *","29. Lý do Không Hợp Lệ",
                                                        "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng","20. ADO","23. Giá món trung bình *","24. Link gian hàng SPF",
-                                                      "25. Link gian hàng GF", "m27. Link gian hàng Google Review","33. Link gian hàng BeF","account_type"
-                                                      ]
+                                                      "25. Link gian hàng GF", "m27. Link gian hàng Google Review","33. Link gian hàng BeF","account_type"]
                                   n = k1["custom_field"]["name"]
                                   vl = k1["value"]
                                   if k1["custom_field"]["master_data_custom_fields"]:
