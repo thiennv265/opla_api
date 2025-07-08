@@ -69,24 +69,24 @@ def send_excel_to_telegram(file_bytes: bytes, filename: str, chat_id: str, bot_t
     }
     data = {
         'chat_id': chat_id,
-        'caption': f'📦 File dữ liệu: {filename}'
+        'caption': f'📦 File: {filename}'
     }
 
     url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
     response = requests.post(url, data=data, files=files)
     return response
 
-def send_log(msg, telegram_token = telegram_token, sender_name=None):
+def send_log(msg, sender_name=None, telegram_token = telegram_token):
     if telegram_token:
       try:
           requests.get(
               f"https://api.telegram.org/bot{telegram_token}/sendMessage",
-              params={"chat_id": "716085753", "text": get_current_time_str() + " " + f"{sender_name}\n{msg}" if sender_name else "\n" + msg}
+              params={"chat_id": "716085753", "text": "🅾️" + get_current_time_str() + " " + f"{sender_name}\n{msg}" if sender_name else "\n" + msg}
           )
       except Exception as e:
           print(e)
     else:
-      print("No token")
+      print("No TELE TOKEN ")
       
 def convert_utc_to_gmt7(dt_str: str) -> str:
     """
@@ -210,9 +210,10 @@ async def log_masked_requests(request: Request, call_next):
     response = await call_next(request)
     status_code = response.status_code
     duration_ms = time.time() - start
-    msg = f"\033[91m{client_ip}\033[0m - {method} {masked_url} - {color_status(status_code)} - {duration_ms:.2f}s"
-    logger.info(msg)
-    send_log(msg,"main")
+    msg_print = f"\033[91m{client_ip}\033[0m - {method} {masked_url} - {color_status(status_code)} - {duration_ms:.2f}s"
+    logger.info(msg_print)
+    msg_sendlog = f"{client_ip} - {method} {masked_url} - {status_code} - {duration_ms:.2f}s"
+    send_log(msg_sendlog,"main")
     return response
 
 def dedup_dicts_smart(data: list[dict]) -> list[dict]:
@@ -396,7 +397,7 @@ def api_opla(
 
                 df = df.replace([np.inf, -np.inf], np.nan)
                 df = df.where(pd.notnull(df), None)
-                if not excel or excel != 1:
+                if not export or export != 1:
                     safe_json = json.dumps(
                         df.to_dict(orient="records"),
                         ignore_nan=True
@@ -452,7 +453,7 @@ def api_logs(
 
                 df = df.replace([np.inf, -np.inf], np.nan)
                 df = df.where(pd.notnull(df), None)
-                if not excel or excel != 1:
+                if not export or export != 1:
                     safe_json = json.dumps(
                         df.to_dict(orient="records"),
                         ignore_nan=True
@@ -484,7 +485,7 @@ def api_lead(
     secrets: str = Query(...),
     fields: List[str] = Query(None),
     limit: int = Query(None),
-    excel: int = Query(None)
+    export: int = Query(None)
 ):
     try:
         if secrets != 'chucm@ym@n8686': return {}
@@ -500,7 +501,7 @@ def api_lead(
             if limit: df = df.iloc[:limit]
             df.replace([np.inf, -np.inf], np.nan, inplace=True)
             df = df.where(pd.notnull(df), None)
-            if not excel or excel != 1:
+            if not export or export != 1:
                 return Response(
                     content=json.dumps(df.to_dict(orient="records"), ignore_nan=True),
                     media_type="application/json"
@@ -586,6 +587,7 @@ def api_clear(token: str = Query(...), secrets: str = Query(...)):
                     "updated": get_current_time_str(),
                     "leads": getleads(token)
                 }
+        send_log("DONE F5", "main")
         return {'result': 'OK :)'}
   else:
     return {"Lỗi": "Sai secrets :("}
