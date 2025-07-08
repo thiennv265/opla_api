@@ -234,8 +234,8 @@ def getdata(token: str):
                           # print(len(value))
                           for i in value:
                             row_log = {}
-                            appendToRow(row_log, f'store_id',item["id"])
-                            appendToRow(row_log, f'store_short_id',item["short_id"])
+                            appendToRow(row_log, f's_id',item["id"])
+                            appendToRow(row_log, f's_short_id',item["short_id"])
                             appendToRow(row_log, f'creator',i["creator"]["email"])
                             appendToRow(row_log, f'datetime', convert_utc_to_gmt7(i["created_at"]))
                             appendToRow(row_log, f'stage',i["new_stage"])
@@ -244,23 +244,23 @@ def getdata(token: str):
                           for i in value:
                             if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *","Quận (cũ)",
                                                                  "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng"]:
-                              appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
+                              appendToRow(row, f's_{i["custom_field"]["name"]}',i["value"])
                         elif key == "opportunity_process_stage":
-                          appendToRow(row, f'store_{key}',value["opportunity_stage"]["name"])
+                          appendToRow(row, f's_{key}',value["opportunity_stage"]["name"])
                         elif key == "owner":
-                          appendToRow(row, f'store_{key}',value["email"])
+                          appendToRow(row, f's_{key}',value["email"])
                         elif key == "users_opportunities":
-                          appendToRow(row, f'store_{key}',value[0]["user"]["email"])
+                          appendToRow(row, f's_{key}',value[0]["user"]["email"])
                         elif key == "accounts_opportunities":
                           for k, v in value[0]["account"].items():
                             included_keys = ["id","name","short_id","account_type","owner","custom_field_account_values","tax_identification_number"]
                             if k in included_keys:
                               if k == "account_type":
-                                appendToRow(row, f'mex_info_{k}',v)
+                                appendToRow(row, f'm_{k}',v)
                               elif k == "tax_identification_number":
-                                appendToRow(row, f'mex_info_tax_id',v)
+                                appendToRow(row, f'm_tax_id',v)
                               elif k == "owner":
-                                appendToRow(row, f'mex_info_{k}',v["email"])
+                                appendToRow(row, f'm_{k}',v["email"])
                               elif k == "custom_field_account_values":
                                 for k1 in v:
                                   excluded_keys_mex = ["34. Link ảnh","21. Phần mềm bán hàng *",	"28. Ghi chú trạng thái","27. Trạng thái ký kết *","29. Lý do Không Hợp Lệ",
@@ -273,9 +273,9 @@ def getdata(token: str):
                                       if i["id"] == vl:
                                         vl = i["value"]
                                   if n not in excluded_keys_mex:
-                                    appendToRow(row, f'mex_info_{n}',vl)
+                                    appendToRow(row, f'm_{n}',vl)
                               else:
-                                appendToRow(row, f'mex_{k}',v)
+                                appendToRow(row, f'm_{k}',v)
                     raw_rows.append(row)
             else:
               return f'Error: {response.status_code} {response.text}'
