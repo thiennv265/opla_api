@@ -26,7 +26,7 @@ send_log(f"✅ Started.","f5")
 
 while True:
     now = datetime.now()
-    if now.minute == 30 and now.second == 0:
+    if now.minute == 30 and now.second == 0 and now.hour < 21 and now.hour > 5:
         try:
             response = requests.get(API_URL)
             msg = f"✅ API: {response.status_code}"
