@@ -81,7 +81,7 @@ def send_log(msg, sender_name=None, telegram_token = telegram_token):
       try:
           requests.get(
               f"https://api.telegram.org/bot{telegram_token}/sendMessage",
-              params={"chat_id": "716085753", "text": "🅾️" + get_current_time_str() + " " + f"{sender_name}\n{msg}" if sender_name else "\n" + msg}
+              params={"chat_id": "716085753", "text": "🅾️" + get_current_time_str() + " " + f"{sender_name}\n{msg}" if sender_name else "\n" + msg,"disable_web_page_preview": True}
           )
       except Exception as e:
           print(e)
@@ -259,8 +259,8 @@ def getdata(token: str):
                           # print(len(value))
                           for i in value:
                             row_log = {}
-                            appendToRow(row_log, f's_id',item["id"])
-                            appendToRow(row_log, f's_short_id',item["short_id"])
+                            appendToRow(row_log, f'store_id',item["id"])
+                            appendToRow(row_log, f'store_short_id',item["short_id"])
                             appendToRow(row_log, f'creator',i["creator"]["email"])
                             appendToRow(row_log, f'datetime', convert_utc_to_gmt7(i["created_at"]))
                             appendToRow(row_log, f'stage',i["new_stage"])
@@ -269,23 +269,23 @@ def getdata(token: str):
                           for i in value:
                             if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *","Quận (cũ)",
                                                                  "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng"]:
-                              appendToRow(row, f's_{i["custom_field"]["name"]}',i["value"])
+                              appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
                         elif key == "opportunity_process_stage":
-                          appendToRow(row, f's_{key}',value["opportunity_stage"]["name"])
+                          appendToRow(row, f'store_{key}',value["opportunity_stage"]["name"])
                         elif key == "owner":
-                          appendToRow(row, f's_{key}',value["email"])
+                          appendToRow(row, f'store_{key}',value["email"])
                         elif key == "users_opportunities":
-                          appendToRow(row, f's_{key}',value[0]["user"]["email"])
+                          appendToRow(row, f'store_{key}',value[0]["user"]["email"])
                         elif key == "accounts_opportunities":
                           for k, v in value[0]["account"].items():
                             included_keys = ["id","name","short_id","account_type","owner","custom_field_account_values","tax_identification_number"]
                             if k in included_keys:
                               if k == "account_type":
-                                appendToRow(row, f'm_{k}',v)
+                                appendToRow(row, f'mex_{k}',v)
                               elif k == "tax_identification_number":
-                                appendToRow(row, f'm_tax_id',v)
+                                appendToRow(row, f'mex_tax_id',v)
                               elif k == "owner":
-                                appendToRow(row, f'm_{k}',v["email"])
+                                appendToRow(row, f'mex_{k}',v["email"])
                               elif k == "custom_field_account_values":
                                 for k1 in v:
                                   excluded_keys_mex = ["34. Link ảnh","21. Phần mềm bán hàng *",	"28. Ghi chú trạng thái","27. Trạng thái ký kết *","29. Lý do Không Hợp Lệ",
@@ -298,9 +298,9 @@ def getdata(token: str):
                                       if i["id"] == vl:
                                         vl = i["value"]
                                   if n not in excluded_keys_mex:
-                                    appendToRow(row, f'm_{n}',vl)
+                                    appendToRow(row, f'mex_{n}',vl)
                               else:
-                                appendToRow(row, f'm_{k}',v)
+                                appendToRow(row, f'mex_{k}',v)
                     raw_rows.append(row)
             else:
               return f'Error: {response.status_code} {response.text}'
@@ -380,12 +380,13 @@ def api_opla(
             with lock:
                 if token not in cache:
                     data, logs = getdata(token)
-                    cache[token] = {
-                        "data": data,
-                        "logs": logs,
-                        "updated": get_current_time_str(),
-                        "leads": getleads(token)
-                    }
+                    if isinstance(data, dict) and new_data:
+                      cache[token] = {
+                          "data": data,
+                          "logs": logs,
+                          "updated": get_current_time_str(),
+                          "leads": getleads(token)
+                      }
 
                 df = pd.DataFrame(cache[token]["data"])
 
@@ -436,12 +437,13 @@ def api_logs(
             with lock:
                 if token not in cache:
                     data, logs = getdata(token)
-                    cache[token] = {
-                        "data": data,
-                        "logs": logs,
-                        "updated": get_current_time_str(),
-                        "leads": getleads(token)
-                    }
+                    if isinstance(data, dict) and data:
+                      cache[token] = {
+                          "data": data,
+                          "logs": logs,
+                          "updated": get_current_time_str(),
+                          "leads": getleads(token)
+                      }
 
                 df = pd.DataFrame(cache[token]["logs"])
 
@@ -491,11 +493,12 @@ def api_lead(
         if secrets != 'chucm@ym@n8686': return {}
         with lock:
             if token not in cache:
-                cache[token] = {
-                    "data": getdata(token),
-                    "updated": get_current_time_str(),
-                    "leads": getleads(token)
-                }
+                new_leads = getleads(token)
+                if isinstance(new_data, dict) and new_data:
+                  cache[token] = {
+                      "updated": get_current_time_str(),
+                      "leads": getleads(token)
+                  }
             df = pd.DataFrame(cache[token]["leads"])
             if fields: df = df[[col for col in fields if col in df.columns]]
             if limit: df = df.iloc[:limit]
