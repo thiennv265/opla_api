@@ -1,4 +1,4 @@
-import subprocess, io, sys, time
+import subprocess, io, sys, time, traceback
 
 def install_if_missing(package):
   try:
@@ -313,11 +313,12 @@ def getdata(token: str):
         send_log(msgg,"main")
         return store_records, store_logs
     except Exception as e:
-        print(e)
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
 def getleads(token: str):
     try:
+        print("lead")
         sta = get_current_time_str()
         raw_rows = []
         total_bytes = 0
@@ -361,6 +362,7 @@ def getleads(token: str):
         send_log(msgg,"main")
         return dunique
     except Exception as e:
+        print(traceback.print_exc())
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
         
 @app.get("/")
@@ -380,7 +382,7 @@ def api_opla(
             with lock:
                 if token not in cache:
                     data, logs = getdata(token)
-                    if isinstance(data, dict) and new_data:
+                    if len(data) > 0:
                       cache[token] = {
                           "data": data,
                           "logs": logs,
@@ -422,6 +424,7 @@ def api_opla(
         else:
             return {}
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
 @app.get("/logs/")
@@ -437,7 +440,7 @@ def api_logs(
             with lock:
                 if token not in cache:
                     data, logs = getdata(token)
-                    if isinstance(data, dict) and data:
+                    if len(data) > 0:
                       cache[token] = {
                           "data": data,
                           "logs": logs,
@@ -494,7 +497,7 @@ def api_lead(
         with lock:
             if token not in cache:
                 new_leads = getleads(token)
-                if isinstance(new_data, dict) and new_data:
+                if len(new_leads) > 0:
                   cache[token] = {
                       "updated": get_current_time_str(),
                       "leads": getleads(token)
@@ -525,6 +528,8 @@ def api_lead(
                     headers=headers
                 )
     except Exception as e:
+        print(e)
+        print(traceback.print_exc())
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
 @app.get("/checkdup/")
