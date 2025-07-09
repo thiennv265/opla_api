@@ -311,7 +311,7 @@ def getdata(token: str):
         msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(store_records)} store records + {len(store_logs)} log records"
         print (msgg)
         send_log(msgg,"main")
-        return store_records, store_logs
+        return [store_records, store_logs]
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
@@ -381,11 +381,11 @@ def api_opla(
         if secrets == 'chucm@ym@n8686':
             with lock:
                 if token not in cache:
-                    data, logs = getdata(token)
-                    if len(data) > 0:
+                    data = getdata(token)
+                    if len(data[0]) > 0:
                       cache[token] = {
-                          "data": data,
-                          "logs": logs,
+                          "data": data[0],
+                          "logs": data[1],
                           "updated": get_current_time_str(),
                           "leads": getleads(token)
                       }
@@ -439,11 +439,11 @@ def api_logs(
         if secrets == 'chucm@ym@n8686':
             with lock:
                 if token not in cache:
-                    data, logs = getdata(token)
-                    if len(data) > 0:
+                    data = getdata(token)
+                    if len(data[0]) > 0:
                       cache[token] = {
-                          "data": data,
-                          "logs": logs,
+                          "data": data[0],
+                          "logs": data[1],
                           "updated": get_current_time_str(),
                           "leads": getleads(token)
                       }
@@ -590,12 +590,14 @@ def api_clear(token: str = Query(...), secrets: str = Query(...)):
     with lock:
       if token in cache:
         del cache[token]
+        data = getdata(token)
         cache[token] = {
-                    "data": getdata(token),
-                    "updated": get_current_time_str(),
-                    "leads": getleads(token)
-                }
-        send_log("DONE F5", "main")
+            "data": data[0],
+            "logs": data[1],
+            "updated": get_current_time_str(),
+            "leads": getleads(token)
+        }
+        send_log("Refreshed!", "main")
         return {'result': 'OK :)'}
   else:
     return {"Lỗi": "Sai secrets :("}
@@ -607,11 +609,13 @@ def last_update(token: str = Query(...)):
       return {"updated": cache[token]["updated"]}
     else:
       try:
-          cache[token] = {
-                            "data": getdata(token),
-                            "updated": get_current_time_str(),
-                            "leads": getleads(token)
-                        }
-          return {"updated": cache[token]["updated"]}
+        data = getdata(token)
+        cache[token] = {
+            "data": data[0],
+            "logs": data[1],
+            "updated": get_current_time_str(),
+            "leads": getleads(token)
+        }
+        return {"updated": cache[token]["updated"]}
       except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
