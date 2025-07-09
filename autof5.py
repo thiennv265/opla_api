@@ -1,11 +1,10 @@
 import getpass, time, requests, datetime
 from datetime import datetime, timezone, timedelta
 
-secret = getpass.getpass("URL: ")
+API_URL = getpass.getpass("URL: ")
 telegram_token = getpass.getpass("TELE TOKEN: ")
 noti_secret = f"Saved: URL: {secret[:10]}** ({len(secret)})\nTELE TOKEN: {telegram_token[:10]}** ({len(telegram_token)})"
 print(noti_secret)
-API_URL = "https://www.google.com"
 
 def get_current_time_str():
   tz_gmt7 = timezone(timedelta(hours=7))
