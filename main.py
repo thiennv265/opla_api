@@ -17,10 +17,9 @@ import requests
 import json
 import numpy as np
 import pandas as pd
-pd.set_option('future.no_silent_downcasting', True)
+# pd.set_option('future.no_silent_downcasting', True)
 from fastapi import FastAPI, Query, Response, Request, HTTPException
 from datetime import datetime, timezone, timedelta
-from cachetools import TTLCache
 from threading import Lock
 from fastapi.responses import JSONResponse
 import simplejson as json
@@ -219,7 +218,10 @@ async def log_masked_requests(request: Request, call_next):
 def dedup_dicts_smart(data: list[dict]) -> list[dict]:
     try:
         # return pd.DataFrame(data).drop_duplicates().to_dict(orient="records")
-        return pd.DataFrame(data).drop_duplicates()
+        df = pd.DataFrame(data).drop_duplicates()
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        df = df.where(pd.notnull(df), None)
+        return df
     except Exception as e:
         print(e)
         # return dedup_large_dict_list(data)
@@ -234,8 +236,8 @@ def getdata(token: str):
         raw_logs = []
         total_bytes = 0
         for skipp in range(0,30001,150):
-            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=160&skip={skipp - 10 if skipp > 0 else 0}"
-            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=20"
+            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=200&skip={skipp - 20 if skipp > 0 else 0}"
+            # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
             headers = {"Authorization": token}
             response = requests.get(url, headers=headers, verify = False)
             if response.status_code == 200:
@@ -250,6 +252,7 @@ def getdata(token: str):
                 for index, item in enumerate(sources):
                     row = {}
                     for key, value in item.items():
+                      # print(key)
                       if key not in excluded_keys:
                         if key not in special_keys:
                           appendToRow(row, f'store_{key}',value)
@@ -267,9 +270,10 @@ def getdata(token: str):
                             raw_logs.append(row_log)
                         elif key =="custom_field_opportunity_values":
                           for i in value:
+                            # print(i["custom_field"])
                             if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *","Quận (cũ)",
                                                                  "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng"]:
-                              appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
+                                appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
                         elif key == "opportunity_process_stage":
                           appendToRow(row, f'store_{key}',value["opportunity_stage"]["name"])
                         elif key == "owner":
@@ -288,9 +292,9 @@ def getdata(token: str):
                                 appendToRow(row, f'mex_{k}',v["email"])
                               elif k == "custom_field_account_values":
                                 for k1 in v:
-                                  excluded_keys_mex = ["34. Link ảnh","21. Phần mềm bán hàng *",	"28. Ghi chú trạng thái","27. Trạng thái ký kết *","29. Lý do Không Hợp Lệ",
+                                  excluded_keys_mex = ["34. Link ảnh","21. Phần mềm bán hàng *","28. Ghi chú trạng thái","27. Trạng thái ký kết *","29. Lý do Không Hợp Lệ",
                                                        "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng","20. ADO","23. Giá món trung bình *","24. Link gian hàng SPF",
-                                                      "25. Link gian hàng GF", "m27. Link gian hàng Google Review","33. Link gian hàng BeF","account_type"]
+                                                      "25. Link gian hàng GF", "27. Link gian hàng Google Review","33. Link gian hàng BeF","account_type"]
                                   n = k1["custom_field"]["name"]
                                   vl = k1["value"]
                                   if k1["custom_field"]["master_data_custom_fields"]:
@@ -301,10 +305,12 @@ def getdata(token: str):
                                     appendToRow(row, f'mex_{n}',vl)
                               else:
                                 appendToRow(row, f'mex_{k}',v)
+                        else:
+                            appendToRow(row, f'store_{key}',value)
                     raw_rows.append(row)
             else:
               return f'Error: {response.status_code} {response.text}'
-            if len(sources) < 160: break
+            if len(sources) < 200: break
         store_records = dedup_dicts_smart(raw_rows)
         store_logs = dedup_dicts_smart(raw_logs)
         sto = get_current_time_str()
@@ -318,7 +324,6 @@ def getdata(token: str):
 
 def getleads(token: str):
     try:
-        print("lead")
         sta = get_current_time_str()
         raw_rows = []
         total_bytes = 0
@@ -358,7 +363,7 @@ def getleads(token: str):
         dunique = dedup_dicts_smart(raw_rows)
         sto = get_current_time_str()
         msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(dunique)} lead records"
-        print (msgg)
+        # print (msgg)
         send_log(msgg,"main")
         return dunique
     except Exception as e:
@@ -379,131 +384,130 @@ def api_opla(
 ):
     try:
         if secrets == 'chucm@ym@n8686':
-            with lock:
-                if token not in cache:
-                    data = getdata(token)
+            if token not in cache:
+                data = getdata(token)
+                with lock:
                     if len(data[0]) > 0:
                       cache[token] = {
                           "data": data[0],
                           "logs": data[1],
                           "updated": get_current_time_str(),
-                          "leads": getleads(token)
+                          "leads": getleads(token),
+                          "updated_leads": get_current_time_str()
                       }
 
-                df = pd.DataFrame(cache[token]["data"])
+            df = pd.DataFrame(cache[token]["data"])
 
-                if limit:
-                    df = df.iloc[:limit]
-                if fields:
-                    valid_fields = [col for col in fields if col in df.columns]
-                    df = df[valid_fields]
+            if limit:
+                df = df.iloc[:limit]
+            if fields:
+                valid_fields = [col for col in fields if col in df.columns]
+                df = df[valid_fields]
 
-                df = df.replace([np.inf, -np.inf], np.nan)
-                df = df.where(pd.notnull(df), None)
-                if not export or export != 1:
-                    safe_json = json.dumps(
-                        df.to_dict(orient="records"),
-                        ignore_nan=True
-                    )
-                    return Response(content=safe_json, media_type="application/json")
-                elif export == 1:                   
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                        df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
+            if not export or export != 1:
+                safe_json = json.dumps(
+                    df.to_dict(orient="records"),
+                    ignore_nan=True
+                )
+                return Response(content=safe_json, media_type="application/json")
+            elif export == 1:                   
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                    df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
 
-                    output.seek(0)
-                    file_content = output.read()
-                    
-                    file_bytes = io.BytesIO(file_content)
-                    file_bytes.seek(0)
-                    # Gửi tới Telegram
-                    send_excel_to_telegram(
-                        file_bytes= file_bytes,
-                        filename=f"store_{get_current_time_str()}.xlsx",
-                        chat_id="716085753",
-                        bot_token=telegram_token
-                    )
+                output.seek(0)
+                file_content = output.read()
+                
+                file_bytes = io.BytesIO(file_content)
+                file_bytes.seek(0)
+                # Gửi tới Telegram
+                send_excel_to_telegram(
+                    file_bytes= file_bytes,
+                    filename=f"api_store_{cache[token]['updated']}.xlsx",
+                    chat_id="716085753",
+                    bot_token=telegram_token
+                )
 
-                    # Trả response
-                    headers = {
-                        "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
-                    }
-                    return Response(
-                        content=file_content,
-                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        headers=headers
-                    )
+                # Trả response
+                headers = {
+                    "Content-Disposition": f"attachment; filename=api_store_{cache[token]['updated']}.xlsx"
+                }
+                return Response(
+                    content=file_content,
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers=headers
+                )
         else:
-            return {}
+            return {"Lỗi": "Sai secrets :("}
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
 @app.get("/logs/")
-def api_logs(
-    token: str = Query(...),
-    secrets: str = Query(...),
-    fields: List[str] = Query(None),
-    limit: int = Query(None),
-    export: int = Query(None)
-):
+def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str] = Query(None),limit: int = Query(None),export: int = Query(None)):
     try:
         if secrets == 'chucm@ym@n8686':
-            with lock:
-                if token not in cache:
-                    data = getdata(token)
+            if token not in cache:
+                data = getdata(token)
+                data_leads = getleads(token)
+                with lock:
                     if len(data[0]) > 0:
                       cache[token] = {
                           "data": data[0],
                           "logs": data[1],
                           "updated": get_current_time_str(),
-                          "leads": getleads(token)
+                          "leads": data_leads,
+                          "updated_leads": get_current_time_str()
                       }
 
-                df = pd.DataFrame(cache[token]["logs"])
+            df = pd.DataFrame(cache[token]["logs"])
+            df_current = pd.DataFrame(cache[token]["data"])
+            expected_cols = ["store_id","store_Ngày Chờ duyệt","store_Ngày Phê duyệt"]
+            available_cols = [col for col in expected_cols if col in df_current.columns]
+            df_current = df_current[available_cols]
+            print(df)
+            print(df_current)
+            if limit:
+                df = df.iloc[:limit]
+            if fields:
+                valid_fields = [col for col in fields if col in df.columns]
+                df = df[valid_fields]
 
-                if limit:
-                    df = df.iloc[:limit]
-                if fields:
-                    valid_fields = [col for col in fields if col in df.columns]
-                    df = df[valid_fields]
+            if not export or export != 1:
+                safe_json = json.dumps(
+                    df.to_dict(orient="records"),
+                    ignore_nan=True
+                )
+                return Response(content=safe_json, media_type="application/json")
+            elif export == 1:                   
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                    df.to_excel(writer, index=False, sheet_name="logs")
+                    df_current.to_excel(writer, index=False, sheet_name="current")
 
-                df = df.replace([np.inf, -np.inf], np.nan)
-                df = df.where(pd.notnull(df), None)
-                if not export or export != 1:
-                    safe_json = json.dumps(
-                        df.to_dict(orient="records"),
-                        ignore_nan=True
-                    )
-                    return Response(content=safe_json, media_type="application/json")
-                elif export == 1:                   
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                        df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
+                output.seek(0)
+                file_content = output.read()
 
-                    output.seek(0)
-                    file_content = output.read()
+                file_bytes = io.BytesIO(file_content)
+                file_bytes.seek(0)
+                # Gửi tới Telegram
+                send_excel_to_telegram(
+                    file_bytes= file_bytes,
+                    filename=f"api_logs_{cache[token]['updated']}.xlsx",
+                    chat_id="716085753",
+                    bot_token=telegram_token
+                )
 
-                    file_bytes = io.BytesIO(file_content)
-                    file_bytes.seek(0)
-                    # Gửi tới Telegram
-                    send_excel_to_telegram(
-                        file_bytes= file_bytes,
-                        filename=f"store_{get_current_time_str()}.xlsx",
-                        chat_id="716085753",
-                        bot_token=telegram_token
-                    )
-
-                    # Trả response
-                    headers = {
-                        "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
-                    }
-                    return Response(
-                        content=file_content,
-                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        headers=headers
-                    )
-            return {}
+                # Trả response
+                headers = {
+                    "Content-Disposition": f"attachment; filename=api_logs_{cache[token]['updated']}.xlsx"
+                }
+                return Response(
+                    content=file_content,
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers=headers
+                )
+        return {"Lỗi": "Sai secrets :("}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
         
@@ -517,140 +521,85 @@ def api_lead(
 ):
     try:
         if secrets != 'chucm@ym@n8686': return {}
-        with lock:
-            if token not in cache:
-                new_leads = getleads(token)
+        if token not in cache:
+            new_leads = getleads(token)
+            with lock:
                 if len(new_leads) > 0:
                   cache[token] = {
-                      "updated": get_current_time_str(),
-                      "leads": getleads(token)
+                      "leads": getleads(token),
+                      "updated_leads": get_current_time_str()
                   }
-            df = pd.DataFrame(cache[token]["leads"])
-            if fields: df = df[[col for col in fields if col in df.columns]]
-            if limit: df = df.iloc[:limit]
-            df.replace([np.inf, -np.inf], np.nan, inplace=True)
-            df = df.where(pd.notnull(df), None)
-            if not export or export != 1:
-                return Response(
-                    content=json.dumps(df.to_dict(orient="records"), ignore_nan=True),
-                    media_type="application/json"
-                )
-            elif export == 1:
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
+        df = pd.DataFrame(cache[token]["leads"])
+        if fields: df = df[[col for col in fields if col in df.columns]]
+        if limit: df = df.iloc[:limit]
+        if not export or export != 1:
+            return Response(
+                content=json.dumps(df.to_dict(orient="records"), ignore_nan=True),
+                media_type="application/json"
+            )
+        elif export == 1:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                df.to_excel(writer, index=False, sheet_name=cache[token]["updated_leads"])
 
-                output.seek(0)
-                file_content = output.read()
+            output.seek(0)
+            file_content = output.read()
 
-                file_bytes = io.BytesIO(file_content)
-                file_bytes.seek(0)
-                # Gửi tới Telegram
-                send_excel_to_telegram(
-                    file_bytes= file_bytes,
-                    filename=f"store_{get_current_time_str()}.xlsx",
-                    chat_id="716085753",
-                    bot_token=telegram_token
-                )
+            file_bytes = io.BytesIO(file_content)
+            file_bytes.seek(0)
+            # Gửi tới Telegram
+            send_excel_to_telegram(
+                file_bytes= file_bytes,
+                filename=f"api_leads_{cache[token]['updated_leads']}.xlsx",
+                chat_id="716085753",
+                bot_token=telegram_token
+            )
 
-                # Trả response
-                headers = {
-                    "Content-Disposition": f"attachment; filename=store_{get_current_time_str()}.xlsx"
-                }
-                return Response(
-                    content=file_content,
-                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers=headers
-                )
+            # Trả response
+            headers = {
+                "Content-Disposition": f"attachment; filename=api_leads_{cache[token]['updated_leads']}.xlsx"
+            }
+            return Response(
+                content=file_content,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers=headers
+            )
 
     except Exception as e:
         print(e)
         print(traceback.print_exc())
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
-@app.get("/checkdup/")
-def api_checkdup(
-    token: str = Query(...),
-    secrets: str = Query(...),
-    rate: int = Query(None),
-    excel: int = Query(None),
-    filter0: int = Query(None)
-):
-    try:
-        if secrets != 'chucm@ym@n8686': return {}
-        with lock:
-            if token not in cache:
-                cache[token] = {
-                    "data": getdata(token),
-                    "updated": get_current_time_str(),
-                    "leads": getleads(token)
-                }
-            if "checkdup" not in cache[token]:
-              df = pd.DataFrame(cache[token]["data"])
-              df = df[["store_id","store_short_id","store_name","store_owner","store_created_at","store_6. Địa chỉ gian hàng *", "mex_short_id", "mex_name"]]
-              if rate:
-                  df = analyze_duplicates(df,threshold=rate)
-              else:
-                  df = analyze_duplicates(df)
-              df.replace([np.inf, -np.inf], np.nan, inplace=True)
-              df = df.where(pd.notnull(df), None)
-              if filter0 == 1: df = df[(df["Dup_Name"] > 0) | (df["Dup_Address"] > 0)]
-              cache[token]["checkdup"] = df
-          
-            if not excel or excel != 1:
-                return Response(
-                    content=json.dumps(cache[token]["checkup"].to_dict(orient="records"), ignore_nan=True),
-                    media_type="application/json"
-                )
-            elif excel == 1:
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    cache[token]["checkup"].to_excel(writer, index=False, sheet_name=get_current_time_str())
-
-                output.seek(0)
-                headers = {
-                    "Content-Disposition": f"attachment; filename=checkdup_{get_current_time_str()}.xlsx"
-                }
-
-                return Response(
-                    content=output.read(),
-                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers=headers
-                )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
-
 @app.get("/f5/")
 def api_clear(token: str = Query(...), secrets: str = Query(...)):
   if secrets == 'chucm@ym@n8686':
-    with lock:
-      if token in cache:
+    if token in cache:
         del cache[token]
         data = getdata(token)
+    with lock:
         cache[token] = {
             "data": data[0],
             "logs": data[1],
             "updated": get_current_time_str(),
-            "leads": getleads(token)
+            "leads": getleads(token),
+            "updated_leads": get_current_time_str()
         }
-        send_log("Refreshed!", "main")
-        return {'result': 'OK :)'}
+    send_log("Refreshed!", "main")
+    return {'result': 'OK :)'}
   else:
     return {"Lỗi": "Sai secrets :("}
     
 @app.get("/f5/clear-all")
 def api_clear(secrets: str = Query(...)):
   if secrets == 'chucm@ym@n8686':
-    with lock:
-        cache[token] = {}
-        send_log("Empty!", "main")
-        return {'result': 'OK :)'}
+    cache[token] = {}
+    send_log("Empty!", "main")
+    return {'result': 'OK :)'}
   else:
     return {"Lỗi": "Sai secrets :("}
 
 @app.get("/updated/")
 def last_update(token: str = Query(...)):
-  with lock:
     if token in cache:
       return {"updated": cache[token]["updated"]}
     else:
@@ -660,7 +609,8 @@ def last_update(token: str = Query(...)):
             "data": data[0],
             "logs": data[1],
             "updated": get_current_time_str(),
-            "leads": getleads(token)
+            "leads": getleads(token),
+            "updated_leads": get_current_time_str()
         }
         return {"updated": cache[token]["updated"]}
       except Exception as e:
