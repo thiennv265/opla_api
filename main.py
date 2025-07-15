@@ -584,9 +584,9 @@ def api_lead(
 @app.get("/f5/")
 def api_clear(token: str = Query(...), secrets: str = Query(...)):
   if secrets == 'chucm@ym@n8686':
-    if cache.get(token, {}).get("data") is None:
+    if cache.get(token, {}).get("data") is not None:
         del cache[token]
-        data = getdata(token)
+    data = getdata(token)
     with lock:
         cache[token] = {
             "data": data[0],
