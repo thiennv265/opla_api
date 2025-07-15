@@ -17,7 +17,7 @@ import requests
 import json
 import numpy as np
 import pandas as pd
-# pd.set_option('future.no_silent_downcasting', True)
+pd.set_option('future.no_silent_downcasting', True)
 from fastapi import FastAPI, Query, Response, Request, HTTPException
 from datetime import datetime, timezone, timedelta
 from threading import Lock
@@ -118,59 +118,6 @@ formatter = CustomFormatter('%(asctime)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-def analyze_duplicates(df, store_col="store_name", addr_col="store_6. Địa chỉ gian hàng *", threshold=99):
-    df = df.copy()
-    df[store_col] = df[store_col].astype(str)
-    df[addr_col] = df[addr_col].astype(str)
-
-    so_luong_trung_ten = []
-    so_luong_trung_diachi = []
-    chi_tiet_trung_ten = []
-    chi_tiet_trung_diachi = []
-
-    for i, row in df.iterrows():
-        current_id = row["store_short_id"]
-        current_store = row[store_col].lower()
-        current_addr = row[addr_col].lower()
-
-        matches_ten = []
-        matches_diachi = []
-
-        for j, cmp_row in df.iterrows():
-            if cmp_row["store_short_id"] == current_id:
-                continue
-
-            cmp_store = cmp_row[store_col].lower()
-            cmp_addr = cmp_row[addr_col].lower()
-
-            # Trùng tên
-            score_store = fuzz.token_sort_ratio(current_store, cmp_store)
-            if score_store >= threshold:
-                matches_ten.append(
-                    f"{{{cmp_row['store_owner']}, {cmp_row['store_created_at']}, {cmp_row['store_short_id']}, {cmp_row[store_col]}}}"
-                )
-
-            # Trùng địa chỉ
-            score_addr = fuzz.token_sort_ratio(current_addr, cmp_addr)
-            if score_addr >= threshold:
-                matches_diachi.append(
-                    f"{{{cmp_row['store_owner']}, {cmp_row['store_created_at']}, {cmp_row['store_short_id']}, {cmp_row[store_col]}, {cmp_row[addr_col]}}}"
-                )
-
-        so_luong_trung_ten.append(len(matches_ten))
-        chi_tiet_trung_ten.append(", ".join(matches_ten))
-
-        so_luong_trung_diachi.append(len(matches_diachi))
-        chi_tiet_trung_diachi.append(", ".join(matches_diachi))
-
-    # Gộp vào df gốc
-    df["Dup_Name"] = so_luong_trung_ten
-    df["Dup_Address"] = so_luong_trung_diachi
-    df["Detail_Address"] = chi_tiet_trung_diachi
-    df["Detail_Name"] = chi_tiet_trung_ten
-
-    return df
-
 def mask_query_params(url: str, keys=("token", "secrets")) -> str:
     for key in keys:
         pattern = rf"({key}=)([^&\s]+)"
@@ -236,7 +183,7 @@ def getdata(token: str):
         raw_logs = []
         total_bytes = 0
         for skipp in range(0,30001,150):
-            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=200&skip={skipp - 20 if skipp > 0 else 0}"
+            url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=170&skip={skipp - 20 if skipp > 0 else 0}"
             # url = f"https://api-admin.oplacrm.com/api/public/opportunities?take=10"
             headers = {"Authorization": token}
             response = requests.get(url, headers=headers, verify = False)
@@ -245,7 +192,7 @@ def getdata(token: str):
                 size = len(json.dumps(sources).encode('utf-8'))  # tính size theo byte
                 total_bytes += size
                 excluded_keys = ["weight","area","google_map_address","description","stage_compact","amount", "invoice", "invoices", "opportunity_process",
-                               "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","owner_id","opportunities_products",
+                               "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","opportunities_products",
                                "locked","date_closed_actual","discussions","is_parent","source","opportunity_status","project_type","opportunities_contacts",
                                "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities","date_open"]
                 special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities","created_at","stage_logs"]
@@ -310,7 +257,7 @@ def getdata(token: str):
                     raw_rows.append(row)
             else:
               return f'Error: {response.status_code} {response.text}'
-            if len(sources) < 200: break
+            if len(sources) < 170: break
         store_records = dedup_dicts_smart(raw_rows)
         store_logs = dedup_dicts_smart(raw_logs)
         sto = get_current_time_str()
@@ -369,7 +316,78 @@ def getleads(token: str):
     except Exception as e:
         print(traceback.print_exc())
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
-        
+
+def convert_all_columns_to_str(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ép toàn bộ các cột trong DataFrame về kiểu str, xử lý cả NaN.
+    """
+    return df.applymap(lambda x: '' if pd.isna(x) else str(x))
+    
+def processing_logs(logs_df, current_df):
+    try:
+        # Xử lý datetime và chuẩn hóa stage
+        logs_df['datetime'] = pd.to_datetime(logs_df['datetime'])
+        logs_df['stage'] = logs_df['stage'].str.strip()
+
+        # Lấy ngày Chờ duyệt (mới nhất)
+        cho_duyet = (
+            logs_df[logs_df['stage'] == 'Chờ Duyệt']
+            .sort_values(['store_id', 'datetime'], ascending=[True, False])
+            .drop_duplicates('store_id', keep='first')[['store_id', 'datetime']]
+            .rename(columns={'datetime': 'logs Ngày Chờ duyệt'})
+        )
+        cho_duyet['logs Ngày Chờ duyệt'] = cho_duyet['logs Ngày Chờ duyệt'].dt.strftime('%Y-%m-%d')  # -> chuỗi
+
+        # Lấy ngày Phê duyệt (mới nhất từ "Cần điều chỉnh", "Đủ thông tin")
+        phe_duyet = (
+            logs_df[logs_df['stage'].isin(['Cần điều chỉnh', 'Đủ thông tin'])]
+            .sort_values(['store_id', 'datetime'], ascending=[True, False])
+            .drop_duplicates('store_id', keep='first')[['store_id', 'datetime']]
+            .rename(columns={'datetime': 'logs Ngày Phê duyệt'})
+        )
+        phe_duyet['logs Ngày Phê duyệt'] = phe_duyet['logs Ngày Phê duyệt'].dt.strftime('%Y-%m-%d')  # -> chuỗi
+
+        # Gộp logs lại
+        logs_summary = cho_duyet.merge(phe_duyet, on='store_id', how='outer')
+
+        # Chuyển ngày trong current về dạng chuỗi (để so sánh và export)
+        current_df['store_Ngày Chờ duyệt'] = pd.to_datetime(current_df['store_Ngày Chờ duyệt']).dt.strftime('%Y-%m-%d')
+        current_df['store_Ngày Phê duyệt'] = pd.to_datetime(current_df['store_Ngày Phê duyệt']).dt.strftime('%Y-%m-%d')
+
+        # Chọn các cột cần từ current và gộp với logs
+        merged = current_df[['store_id', 'store_short_id', 'store_Ngày Chờ duyệt', 'store_Ngày Phê duyệt']].merge(
+            logs_summary, on='store_id', how='left'
+        )
+
+        # So sánh ngày
+        merged['Check Chờ Duyệt'] = merged['store_Ngày Chờ duyệt'] == merged['logs Ngày Chờ duyệt']
+        merged['Check Phê Duyệt'] = merged['store_Ngày Phê duyệt'] == merged['logs Ngày Phê duyệt']
+
+        # Tạo cột correct nếu lệch
+        merged['correct Ngày Chờ duyệt'] = merged.apply(
+            lambda row: row['logs Ngày Chờ duyệt'] if pd.notna(row['logs Ngày Chờ duyệt']) and row['logs Ngày Chờ duyệt'] != row['store_Ngày Chờ duyệt'] else '',
+            axis=1
+        )
+        merged['correct Ngày Phê duyệt'] = merged.apply(
+            lambda row: row['logs Ngày Phê duyệt'] if pd.notna(row['logs Ngày Phê duyệt']) and row['logs Ngày Phê duyệt'] != row['store_Ngày Phê duyệt'] else '',
+            axis=1
+        )
+
+        # Kết quả cuối cùng
+        final_result = merged[[
+            'store_id', 'store_short_id',
+            'logs Ngày Chờ duyệt', 'store_Ngày Chờ duyệt', 'Check Chờ Duyệt', 'correct Ngày Chờ duyệt',
+            'logs Ngày Phê duyệt', 'store_Ngày Phê duyệt', 'Check Phê Duyệt', 'correct Ngày Phê duyệt'
+        ]]
+        return final_result
+        # # Xuất file Excel
+        # final_result.to_excel("ket_qua_so_sanh.xlsx", index=False)
+
+        # # In thử kết quả
+        # print(final_result)
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 @app.get("/")
 def home():
   return {"hello":":)"}
@@ -384,16 +402,15 @@ def api_opla(
 ):
     try:
         if secrets == 'chucm@ym@n8686':
-            if token not in cache:
+            if cache.get(token, {}).get("data") is None:
                 data = getdata(token)
+                data_leads = getleads(token)
                 with lock:
                     if len(data[0]) > 0:
                       cache[token] = {
                           "data": data[0],
                           "logs": data[1],
                           "updated": get_current_time_str(),
-                          "leads": getleads(token),
-                          "updated_leads": get_current_time_str()
                       }
 
             df = pd.DataFrame(cache[token]["data"])
@@ -447,26 +464,24 @@ def api_opla(
 def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str] = Query(None),limit: int = Query(None),export: int = Query(None)):
     try:
         if secrets == 'chucm@ym@n8686':
-            if token not in cache:
+            if cache.get(token, {}).get("data") is None:
                 data = getdata(token)
-                data_leads = getleads(token)
                 with lock:
                     if len(data[0]) > 0:
                       cache[token] = {
                           "data": data[0],
                           "logs": data[1],
                           "updated": get_current_time_str(),
-                          "leads": data_leads,
-                          "updated_leads": get_current_time_str()
                       }
 
             df = pd.DataFrame(cache[token]["logs"])
             df_current = pd.DataFrame(cache[token]["data"])
-            expected_cols = ["store_id","store_Ngày Chờ duyệt","store_Ngày Phê duyệt"]
+            expected_cols = ["store_id","store_short_id","store_Ngày Chờ duyệt","store_Ngày Phê duyệt"]
             available_cols = [col for col in expected_cols if col in df_current.columns]
             df_current = df_current[available_cols]
-            print(df)
-            print(df_current)
+            df_processing = processing_logs(df,df_current)
+            # print(df)
+            # print(df_current)
             if limit:
                 df = df.iloc[:limit]
             if fields:
@@ -474,20 +489,16 @@ def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str]
                 df = df[valid_fields]
 
             if not export or export != 1:
-                safe_json = json.dumps(
-                    df.to_dict(orient="records"),
-                    ignore_nan=True
-                )
-                return Response(content=safe_json, media_type="application/json")
+                return {"Thông báo":"Không xem được :)"}
             elif export == 1:                   
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    df.to_excel(writer, index=False, sheet_name="logs")
-                    df_current.to_excel(writer, index=False, sheet_name="current")
+                    convert_all_columns_to_str(df).to_excel(writer, index=False, sheet_name="logs")
+                    convert_all_columns_to_str(df_current).to_excel(writer, index=False, sheet_name="current")
+                    convert_all_columns_to_str(df_processing).to_excel(writer, index=False, sheet_name="processing")
 
                 output.seek(0)
                 file_content = output.read()
-
                 file_bytes = io.BytesIO(file_content)
                 file_bytes.seek(0)
                 # Gửi tới Telegram
@@ -521,12 +532,12 @@ def api_lead(
 ):
     try:
         if secrets != 'chucm@ym@n8686': return {}
-        if token not in cache:
-            new_leads = getleads(token)
+        if cache.get(token, {}).get("leads") is None:
+            data_leads = getleads(token)
             with lock:
-                if len(new_leads) > 0:
+                if len(data_leads) > 0:
                   cache[token] = {
-                      "leads": getleads(token),
+                      "leads": data_leads,
                       "updated_leads": get_current_time_str()
                   }
         df = pd.DataFrame(cache[token]["leads"])
@@ -573,7 +584,7 @@ def api_lead(
 @app.get("/f5/")
 def api_clear(token: str = Query(...), secrets: str = Query(...)):
   if secrets == 'chucm@ym@n8686':
-    if token in cache:
+    if cache.get(token, {}).get("data") is None:
         del cache[token]
         data = getdata(token)
     with lock:
@@ -581,8 +592,6 @@ def api_clear(token: str = Query(...), secrets: str = Query(...)):
             "data": data[0],
             "logs": data[1],
             "updated": get_current_time_str(),
-            "leads": getleads(token),
-            "updated_leads": get_current_time_str()
         }
     send_log("Refreshed!", "main")
     return {'result': 'OK :)'}
@@ -609,8 +618,6 @@ def last_update(token: str = Query(...)):
             "data": data[0],
             "logs": data[1],
             "updated": get_current_time_str(),
-            "leads": getleads(token),
-            "updated_leads": get_current_time_str()
         }
         return {"updated": cache[token]["updated"]}
       except Exception as e:
