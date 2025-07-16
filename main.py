@@ -332,7 +332,6 @@ def processing_logs(logs_df, current_df):
         # Lấy ngày Chờ duyệt (mới nhất)
         cho_duyet = (
             logs_df[logs_df['stage'] == 'Chờ Duyệt']
-            .sort_values(['store_id', 'datetime'], ascending=[True, False])
             .drop_duplicates('store_id', keep='first')[['store_id', 'datetime']]
             .rename(columns={'datetime': 'logs Ngày Chờ duyệt'})
         )
@@ -341,7 +340,6 @@ def processing_logs(logs_df, current_df):
         # Lấy ngày Phê duyệt (mới nhất từ "Cần điều chỉnh", "Đủ thông tin")
         phe_duyet = (
             logs_df[logs_df['stage'].isin(['Cần điều chỉnh', 'Đủ thông tin'])]
-            .sort_values(['store_id', 'datetime'], ascending=[True, False])
             .drop_duplicates('store_id', keep='first')[['store_id', 'datetime']]
             .rename(columns={'datetime': 'logs Ngày Phê duyệt'})
         )
@@ -402,25 +400,19 @@ def api_opla(
 ):
     try:
         if secrets == 'chucm@ym@n8686':
-            if cache.get(token, {}).get("data") is None:
-                data = getdata(token)
-                data_leads = getleads(token)
+            if cache.get(token, {}).get("stores") is None:
+                data_stores = getdata(token)
                 with lock:
                     if len(data[0]) > 0:
-                      cache[token] = {
-                          "data": data[0],
-                          "logs": data[1],
-                          "updated": get_current_time_str(),
-                      }
-
-            df = pd.DataFrame(cache[token]["data"])
-
+                      cache[token]["stores"] = data[0]
+                      cache[token]["stage_logs"] = data[1]
+                      cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
+            df = pd.DataFrame(cache[token]["stores"])
             if limit:
                 df = df.iloc[:limit]
             if fields:
                 valid_fields = [col for col in fields if col in df.columns]
                 df = df[valid_fields]
-
             if not export or export != 1:
                 safe_json = json.dumps(
                     df.to_dict(orient="records"),
@@ -430,7 +422,7 @@ def api_opla(
             elif export == 1:                   
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    df.to_excel(writer, index=False, sheet_name=cache[token]["updated"])
+                    df.to_excel(writer, index=False, sheet_name=cache[token]["updated_stores_and_stage_logs"])
 
                 output.seek(0)
                 file_content = output.read()
@@ -440,7 +432,7 @@ def api_opla(
                 # Gửi tới Telegram
                 send_excel_to_telegram(
                     file_bytes= file_bytes,
-                    filename=f"api_store_{cache[token]['updated']}.xlsx",
+                    filename=f"api_store_{cache[token]['updated_stores_and_stage_logs']}.xlsx",
                     chat_id="716085753",
                     bot_token=telegram_token
                 )
@@ -464,18 +456,16 @@ def api_opla(
 def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str] = Query(None),limit: int = Query(None),export: int = Query(None)):
     try:
         if secrets == 'chucm@ym@n8686':
-            if cache.get(token, {}).get("data") is None:
-                data = getdata(token)
+            if cache.get(token, {}).get("stage_logs") is None:
+                data_stores = getdata(token)
                 with lock:
                     if len(data[0]) > 0:
-                      cache[token] = {
-                          "data": data[0],
-                          "logs": data[1],
-                          "updated": get_current_time_str(),
-                      }
+                      cache[token]["stores"] = data[0]
+                      cache[token]["stage_logs"] = data[1]
+                      cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
 
-            df = pd.DataFrame(cache[token]["logs"])
-            df_current = pd.DataFrame(cache[token]["data"])
+            df = pd.DataFrame(cache[token]["stage_logs"])
+            df_current = pd.DataFrame(cache[token]["stores"])
             expected_cols = ["store_id","store_short_id","store_Ngày Chờ duyệt","store_Ngày Phê duyệt"]
             available_cols = [col for col in expected_cols if col in df_current.columns]
             df_current = df_current[available_cols]
@@ -504,14 +494,14 @@ def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str]
                 # Gửi tới Telegram
                 send_excel_to_telegram(
                     file_bytes= file_bytes,
-                    filename=f"api_logs_{cache[token]['updated']}.xlsx",
+                    filename=f"api_logs_{cache[token]['updated_stores_and_stage_logs']}.xlsx",
                     chat_id="716085753",
                     bot_token=telegram_token
                 )
 
                 # Trả response
                 headers = {
-                    "Content-Disposition": f"attachment; filename=api_logs_{cache[token]['updated']}.xlsx"
+                    "Content-Disposition": f"attachment; filename=api_logs_{cache[token]['updated_stores_and_stage_logs']}.xlsx"
                 }
                 return Response(
                     content=file_content,
@@ -520,7 +510,8 @@ def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str]
                 )
         return {"Lỗi": "Sai secrets :("}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
+      print(traceback.print_exc())
+      raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
         
 @app.get("/leads/")
 def api_lead(
@@ -577,22 +568,20 @@ def api_lead(
             )
 
     except Exception as e:
-        print(e)
         print(traceback.print_exc())
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
 @app.get("/f5/")
-def api_clear(token: str = Query(...), secrets: str = Query(...)):
+def api_f5(token: str = Query(...), secrets: str = Query(...)):
   if secrets == 'chucm@ym@n8686':
     if cache.get(token, {}).get("data") is not None:
         del cache[token]
-    data = getdata(token)
+    data_stores = getdata(token)
     with lock:
-        cache[token] = {
-            "data": data[0],
-            "logs": data[1],
-            "updated": get_current_time_str(),
-        }
+        if len(data[0]) > 0:
+          cache[token]["stores"] = data[0]
+          cache[token]["stage_logs"] = data[1]
+          cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
     send_log("Refreshed!", "main")
     return {'result': 'OK :)'}
   else:
@@ -601,7 +590,7 @@ def api_clear(token: str = Query(...), secrets: str = Query(...)):
 @app.get("/f5/clear-all")
 def api_clear(secrets: str = Query(...)):
   if secrets == 'chucm@ym@n8686':
-    cache[token] = {}
+    cache = {}
     send_log("Empty!", "main")
     return {'result': 'OK :)'}
   else:
@@ -609,16 +598,10 @@ def api_clear(secrets: str = Query(...)):
 
 @app.get("/updated/")
 def last_update(token: str = Query(...)):
-    if token in cache:
-      return {"updated": cache[token]["updated"]}
+  try:
+    if cache.get(token, {}).get("updated") is not None:
+      return {"updated_stores_and_stage_logs": cache[token]["updated_stores_and_stage_logs"], "updated_leads": cache[token]["updated_leads"]}
     else:
-      try:
-        data = getdata(token)
-        cache[token] = {
-            "data": data[0],
-            "logs": data[1],
-            "updated": get_current_time_str(),
-        }
-        return {"updated": cache[token]["updated"]}
-      except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
+      return {"Thông báo":"Không có data"}
+  except Exception as e:
+    raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
