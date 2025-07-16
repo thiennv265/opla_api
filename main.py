@@ -192,7 +192,7 @@ def getdata(token: str):
                 size = len(json.dumps(sources).encode('utf-8'))  # tính size theo byte
                 total_bytes += size
                 excluded_keys = ["weight","area","google_map_address","description","stage_compact","amount", "invoice", "invoices", "opportunity_process",
-                               "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","opportunities_products",
+                               "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","opportunities_products","date_closed",
                                "locked","date_closed_actual","discussions","is_parent","source","opportunity_status","project_type","opportunities_contacts",
                                "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities","date_open"]
                 special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities","created_at","stage_logs"]
@@ -217,7 +217,7 @@ def getdata(token: str):
                             raw_logs.append(row_log)
                         elif key =="custom_field_opportunity_values":
                           for i in value:
-                            # print(i["custom_field"])
+                            print(i["custom_field"])
                             if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *","Quận (cũ)",
                                                                  "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng"]:
                                 appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
@@ -403,9 +403,10 @@ def api_opla(
             if cache.get(token, {}).get("stores") is None:
                 data_stores = getdata(token)
                 with lock:
-                    if len(data[0]) > 0:
-                      cache[token]["stores"] = data[0]
-                      cache[token]["stage_logs"] = data[1]
+                    if len(data_stores[0]) > 0:
+                      if token not in cache: cache[token] = {}
+                      cache[token]["stores"] = data_stores[0]
+                      cache[token]["stage_logs"] = data_stores[1]
                       cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
             df = pd.DataFrame(cache[token]["stores"])
             if limit:
@@ -439,7 +440,7 @@ def api_opla(
 
                 # Trả response
                 headers = {
-                    "Content-Disposition": f"attachment; filename=api_store_{cache[token]['updated']}.xlsx"
+                    "Content-Disposition": f"attachment; filename=api_store_{cache[token]['updated_stores_and_stage_logs']}.xlsx"
                 }
                 return Response(
                     content=file_content,
@@ -459,9 +460,10 @@ def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str]
             if cache.get(token, {}).get("stage_logs") is None:
                 data_stores = getdata(token)
                 with lock:
-                    if len(data[0]) > 0:
-                      cache[token]["stores"] = data[0]
-                      cache[token]["stage_logs"] = data[1]
+                    if len(data_stores[1]) > 0:
+                      if token not in cache: cache[token] = {}
+                      cache[token]["stores"] = data_stores[0]
+                      cache[token]["stage_logs"] = data_stores[1]
                       cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
 
             df = pd.DataFrame(cache[token]["stage_logs"])
@@ -470,8 +472,8 @@ def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str]
             available_cols = [col for col in expected_cols if col in df_current.columns]
             df_current = df_current[available_cols]
             df_processing = processing_logs(df,df_current)
-            # print(df)
-            # print(df_current)
+            print(df)
+            print(df_current)
             if limit:
                 df = df.iloc[:limit]
             if fields:
@@ -527,10 +529,9 @@ def api_lead(
             data_leads = getleads(token)
             with lock:
                 if len(data_leads) > 0:
-                  cache[token] = {
-                      "leads": data_leads,
-                      "updated_leads": get_current_time_str()
-                  }
+                  if token not in cache: cache[token] = {}
+                  cache[token]["leads"] = data_leads,
+                  cache[token]["updated_leads"] = get_current_time_str()
         df = pd.DataFrame(cache[token]["leads"])
         if fields: df = df[[col for col in fields if col in df.columns]]
         if limit: df = df.iloc[:limit]
@@ -578,9 +579,10 @@ def api_f5(token: str = Query(...), secrets: str = Query(...)):
         del cache[token]
     data_stores = getdata(token)
     with lock:
-        if len(data[0]) > 0:
-          cache[token]["stores"] = data[0]
-          cache[token]["stage_logs"] = data[1]
+        if len(data_stores[0]) > 0:
+          if token not in cache: cache[token] = {}
+          cache[token]["stores"] = data_stores[0]
+          cache[token]["stage_logs"] = data_stores[1]
           cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
     send_log("Refreshed!", "main")
     return {'result': 'OK :)'}
@@ -599,9 +601,8 @@ def api_clear(secrets: str = Query(...)):
 @app.get("/updated/")
 def last_update(token: str = Query(...)):
   try:
-    if cache.get(token, {}).get("updated") is not None:
-      return {"updated_stores_and_stage_logs": cache[token]["updated_stores_and_stage_logs"], "updated_leads": cache[token]["updated_leads"]}
-    else:
-      return {"Thông báo":"Không có data"}
+    return {
+    "updated_stores_and_stage_logs": cache.get(token, {}).get("updated_stores_and_stage_logs"),
+    "updated_leads": cache.get(token, {}).get("updated_leads")}
   except Exception as e:
     raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
