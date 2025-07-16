@@ -488,7 +488,7 @@ def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str]
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
                     convert_all_columns_to_str(df).to_excel(writer, index=False, sheet_name="logs")
                     convert_all_columns_to_str(df_current).to_excel(writer, index=False, sheet_name="current")
-                    if df_processing:
+                    if df_processing is not None and not df_processing.empty:
                         convert_all_columns_to_str(df_processing).to_excel(writer, index=False, sheet_name="processing")
 
                 output.seek(0)
