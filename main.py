@@ -385,7 +385,8 @@ def processing_logs(logs_df, current_df):
         # print(final_result)
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
+        send_log(f"Lỗi {e}", "main")
+        return None
 @app.get("/")
 def home():
   return {"hello":":)"}
@@ -472,8 +473,8 @@ def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str]
             available_cols = [col for col in expected_cols if col in df_current.columns]
             df_current = df_current[available_cols]
             df_processing = processing_logs(df,df_current)
-            print(df)
-            print(df_current)
+            # print(df)
+            # print(df_current)
             if limit:
                 df = df.iloc[:limit]
             if fields:
@@ -487,7 +488,8 @@ def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str]
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
                     convert_all_columns_to_str(df).to_excel(writer, index=False, sheet_name="logs")
                     convert_all_columns_to_str(df_current).to_excel(writer, index=False, sheet_name="current")
-                    convert_all_columns_to_str(df_processing).to_excel(writer, index=False, sheet_name="processing")
+                    if df_processing:
+                        convert_all_columns_to_str(df_processing).to_excel(writer, index=False, sheet_name="processing")
 
                 output.seek(0)
                 file_content = output.read()
