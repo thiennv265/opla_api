@@ -217,7 +217,7 @@ def getdata(token: str):
                             raw_logs.append(row_log)
                         elif key =="custom_field_opportunity_values":
                           for i in value:
-                            print(i["custom_field"])
+                            # print(i["custom_field"])
                             if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *","Quận (cũ)",
                                                                  "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng"]:
                                 appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
