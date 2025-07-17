@@ -532,7 +532,7 @@ def api_lead(
             with lock:
                 if len(data_leads) > 0:
                   if token not in cache: cache[token] = {}
-                  cache[token]["leads"] = data_leads,
+                  cache[token]["leads"] = data_leads
                   cache[token]["updated_leads"] = get_current_time_str()
         df = pd.DataFrame(cache[token]["leads"])
         if fields: df = df[[col for col in fields if col in df.columns]]
