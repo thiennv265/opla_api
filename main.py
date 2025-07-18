@@ -264,6 +264,12 @@ def getdata(token: str):
         msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(store_records)} store records + {len(store_logs)} log records"
         print (msgg)
         send_log(msgg,"main")
+        with lock:
+          if len(store_records) > 0:
+            if token not in cache: cache[token] = {}
+            cache[token]["stores"] = store_records
+            cache[token]["stage_logs"] = store_logs
+            cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
         return [store_records, store_logs]
     except Exception as e:
         traceback.print_exc()
@@ -310,7 +316,12 @@ def getleads(token: str):
         dunique = dedup_dicts_smart(raw_rows)
         sto = get_current_time_str()
         msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(dunique)} lead records"
-        # print (msgg)
+        print (msgg)
+        with lock:
+          if len(dunique) > 0:
+            if token not in cache: cache[token] = {}
+            cache[token]["leads"] = dunique
+            cache[token]["updated_leads"] = get_current_time_str()
         send_log(msgg,"main")
         return dunique
     except Exception as e:
@@ -403,12 +414,6 @@ def api_opla(
         if secrets == 'chucm@ym@n8686':
             if cache.get(token, {}).get("stores") is None:
                 data_stores = getdata(token)
-                with lock:
-                    if len(data_stores[0]) > 0:
-                      if token not in cache: cache[token] = {}
-                      cache[token]["stores"] = data_stores[0]
-                      cache[token]["stage_logs"] = data_stores[1]
-                      cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
             df = pd.DataFrame(cache[token]["stores"])
             if limit:
                 df = df.iloc[:limit]
@@ -460,13 +465,6 @@ def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str]
         if secrets == 'chucm@ym@n8686':
             if cache.get(token, {}).get("stage_logs") is None:
                 data_stores = getdata(token)
-                with lock:
-                    if len(data_stores[1]) > 0:
-                      if token not in cache: cache[token] = {}
-                      cache[token]["stores"] = data_stores[0]
-                      cache[token]["stage_logs"] = data_stores[1]
-                      cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
-
             df = pd.DataFrame(cache[token]["stage_logs"])
             df_current = pd.DataFrame(cache[token]["stores"])
             expected_cols = ["store_id","store_short_id","store_Ngày Chờ duyệt","store_Ngày Phê duyệt"]
@@ -529,12 +527,7 @@ def api_lead(
         if secrets != 'chucm@ym@n8686': return {}
         if cache.get(token, {}).get("leads") is None:
             data_leads = getleads(token)
-            with lock:
-                if len(data_leads) > 0:
-                  if token not in cache: cache[token] = {}
-                  cache[token]["leads"] = data_leads
-                  cache[token]["updated_leads"] = get_current_time_str()
-        df = pd.DataFrame(cache[token]["leads"])
+        df = cache[token]["leads"]
         if fields: df = df[[col for col in fields if col in df.columns]]
         if limit: df = df.iloc[:limit]
         if not export or export != 1:
@@ -580,12 +573,6 @@ def api_f5(token: str = Query(...), secrets: str = Query(...)):
     if cache.get(token, {}).get("data") is not None:
         del cache[token]
     data_stores = getdata(token)
-    with lock:
-        if len(data_stores[0]) > 0:
-          if token not in cache: cache[token] = {}
-          cache[token]["stores"] = data_stores[0]
-          cache[token]["stage_logs"] = data_stores[1]
-          cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
     send_log("Refreshed!", "main")
     return {'result': 'OK :)'}
   else:
