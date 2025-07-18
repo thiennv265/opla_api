@@ -399,7 +399,7 @@ def processing_logs(logs_df, current_df):
         send_log(f"Lỗi {e}", "main")
         return None
 
-def tele_logs(df, df_current):
+def tele_logs(df, df_current, token):
   try:
     expected_cols = ["store_id","store_short_id","store_Ngày Chờ duyệt","store_Ngày Phê duyệt"]
     available_cols = [col for col in expected_cols if col in df_current.columns]
@@ -429,7 +429,7 @@ def tele_logs(df, df_current):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
-def tele_stores(df):
+def tele_stores(df, token):
   try:               
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -625,8 +625,8 @@ def api_f5(token: str = Query(...), secrets: str = Query(...)):
     if cache.get(token, {}).get("data") is not None:
         del cache[token]
     data_stores = getdata(token)
-    tele_logs(cache[token]["stage_logs"], cache[token]["stores"])
-    tele_stores(cache[token]["stores"])
+    tele_logs(cache[token]["stage_logs"], cache[token]["stores"], token)
+    tele_stores(cache[token]["stores"], token)
     send_log("Refreshed!", "main")
     return {'result': 'OK :)'}
   else:
