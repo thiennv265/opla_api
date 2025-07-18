@@ -398,6 +398,58 @@ def processing_logs(logs_df, current_df):
         traceback.print_exc()
         send_log(f"Lỗi {e}", "main")
         return None
+
+def tele_logs(df, df_current):
+  try:
+    expected_cols = ["store_id","store_short_id","store_Ngày Chờ duyệt","store_Ngày Phê duyệt"]
+    available_cols = [col for col in expected_cols if col in df_current.columns]
+    df_current = df_current[available_cols]
+    df_processing = processing_logs(df,df_current)
+    # print(df)
+    # print(df_current)                
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        convert_all_columns_to_str(df).to_excel(writer, index=False, sheet_name="logs")
+        convert_all_columns_to_str(df_current).to_excel(writer, index=False, sheet_name="current")
+        if df_processing is not None and not df_processing.empty:
+            convert_all_columns_to_str(df_processing).to_excel(writer, index=False, sheet_name="processing")
+
+    output.seek(0)
+    file_content = output.read()
+    file_bytes = io.BytesIO(file_content)
+    file_bytes.seek(0)
+    # Gửi tới Telegram
+    send_excel_to_telegram(
+        file_bytes= file_bytes,
+        filename=f"api_logs_{cache[token]['updated_stores_and_stage_logs']}.xlsx",
+        chat_id="716085753",
+        bot_token=telegram_token
+    )
+  except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
+
+def tele_stores(df):
+  try:               
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        convert_all_columns_to_str(df).to_excel(writer, index=False, sheet_name="stores")
+      
+    output.seek(0)
+    file_content = output.read()
+    file_bytes = io.BytesIO(file_content)
+    file_bytes.seek(0)
+    # Gửi tới Telegram
+    send_excel_to_telegram(
+        file_bytes= file_bytes,
+        filename=f"api_logs_{cache[token]['updated_stores_and_stage_logs']}.xlsx",
+        chat_id="716085753",
+        bot_token=telegram_token
+    )
+  except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
+
 @app.get("/")
 def home():
   return {"hello":":)"}
@@ -573,6 +625,8 @@ def api_f5(token: str = Query(...), secrets: str = Query(...)):
     if cache.get(token, {}).get("data") is not None:
         del cache[token]
     data_stores = getdata(token)
+    tele_logs(cache[token]["stage_logs"], cache[token]["stores"])
+    tele_stores(cache[token]["stores"])
     send_log("Refreshed!", "main")
     return {'result': 'OK :)'}
   else:
