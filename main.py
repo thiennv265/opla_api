@@ -265,8 +265,8 @@ def getdata(token: str):
         print (msgg)
         send_log(msgg,"main")
         with lock:
+          if token not in cache: cache[token] = {}
           if len(store_records) > 0:
-            if token not in cache: cache[token] = {}
             cache[token]["stores"] = store_records
             cache[token]["stage_logs"] = store_logs
             cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
@@ -318,8 +318,8 @@ def getleads(token: str):
         msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(dunique)} lead records"
         print (msgg)
         with lock:
+          if token not in cache: cache[token] = {}
           if len(dunique) > 0:
-            if token not in cache: cache[token] = {}
             cache[token]["leads"] = dunique
             cache[token]["updated_leads"] = get_current_time_str()
         send_log(msgg,"main")
@@ -588,8 +588,8 @@ def api_lead(
 ):
     try:
         if secrets != 'chucm@ym@n8686': return {}
-        if cache.get(token, {}).get("leads") is None:
-            data_leads = getleads(token)
+        # if cache.get(token, {}).get("leads") is None:
+        data_leads = getleads(token)
         df = cache[token]["leads"]
         if fields: df = df[[col for col in fields if col in df.columns]]
         if limit: df = df.iloc[:limit]
