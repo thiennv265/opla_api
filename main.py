@@ -17,7 +17,7 @@ import requests
 import json
 import numpy as np
 import pandas as pd
-pd.set_option('future.no_silent_downcasting', True)
+# pd.set_option('future.no_silent_downcasting', True)
 from fastapi import FastAPI, Query, Response, Request, HTTPException
 from datetime import datetime, timezone, timedelta
 from threading import Lock
@@ -346,7 +346,7 @@ def processing_logs(logs_df, current_df):
             .drop_duplicates('store_id', keep='first')[['store_id', 'datetime']]
             .rename(columns={'datetime': 'logs Ngày Chờ duyệt'})
         )
-        cho_duyet['logs Ngày Chờ duyệt'] = cho_duyet['logs Ngày Chờ duyệt'].dt.strftime('%Y-%m-%d')  # -> chuỗi
+        cho_duyet['logs Ngày Chờ duyệt'] = cho_duyet['logs Ngày Chờ duyệt'].dt.strftime('%Y-%m-%d')
 
         # Lấy ngày Phê duyệt (mới nhất từ "Cần điều chỉnh", "Đủ thông tin")
         phe_duyet = (
@@ -354,19 +354,28 @@ def processing_logs(logs_df, current_df):
             .drop_duplicates('store_id', keep='first')[['store_id', 'datetime']]
             .rename(columns={'datetime': 'logs Ngày Phê duyệt'})
         )
-        phe_duyet['logs Ngày Phê duyệt'] = phe_duyet['logs Ngày Phê duyệt'].dt.strftime('%Y-%m-%d')  # -> chuỗi
+        phe_duyet['logs Ngày Phê duyệt'] = phe_duyet['logs Ngày Phê duyệt'].dt.strftime('%Y-%m-%d')
 
         # Gộp logs lại
         logs_summary = cho_duyet.merge(phe_duyet, on='store_id', how='outer')
 
+        # 🔧 Dùng .copy() để tránh SettingWithCopyWarning
+        current_df = current_df.copy()
+
         # Chuyển ngày trong current về dạng chuỗi (để so sánh và export)
-        current_df['store_Ngày Chờ duyệt'] = pd.to_datetime(current_df['store_Ngày Chờ duyệt']).dt.strftime('%Y-%m-%d')
-        current_df['store_Ngày Phê duyệt'] = pd.to_datetime(current_df['store_Ngày Phê duyệt']).dt.strftime('%Y-%m-%d')
+        current_df['store_Ngày Chờ duyệt'] = pd.to_datetime(
+            current_df['store_Ngày Chờ duyệt'], errors='coerce'
+        ).dt.strftime('%Y-%m-%d')
+
+        current_df['store_Ngày Phê duyệt'] = pd.to_datetime(
+            current_df['store_Ngày Phê duyệt'], errors='coerce'
+        ).dt.strftime('%Y-%m-%d')
 
         # Chọn các cột cần từ current và gộp với logs
-        merged = current_df[['store_id', 'store_short_id', 'store_Ngày Chờ duyệt', 'store_Ngày Phê duyệt']].merge(
-            logs_summary, on='store_id', how='left'
-        )
+        merged = current_df[[
+            'store_id', 'store_short_id',
+            'store_Ngày Chờ duyệt', 'store_Ngày Phê duyệt'
+        ]].merge(logs_summary, on='store_id', how='left')
 
         # So sánh ngày
         merged['Check Chờ Duyệt'] = merged['store_Ngày Chờ duyệt'] == merged['logs Ngày Chờ duyệt']
@@ -374,11 +383,15 @@ def processing_logs(logs_df, current_df):
 
         # Tạo cột correct nếu lệch
         merged['correct Ngày Chờ duyệt'] = merged.apply(
-            lambda row: row['logs Ngày Chờ duyệt'] if pd.notna(row['logs Ngày Chờ duyệt']) and row['logs Ngày Chờ duyệt'] != row['store_Ngày Chờ duyệt'] else '',
+            lambda row: row['logs Ngày Chờ duyệt']
+            if pd.notna(row['logs Ngày Chờ duyệt']) and row['logs Ngày Chờ duyệt'] != row['store_Ngày Chờ duyệt']
+            else '',
             axis=1
         )
         merged['correct Ngày Phê duyệt'] = merged.apply(
-            lambda row: row['logs Ngày Phê duyệt'] if pd.notna(row['logs Ngày Phê duyệt']) and row['logs Ngày Phê duyệt'] != row['store_Ngày Phê duyệt'] else '',
+            lambda row: row['logs Ngày Phê duyệt']
+            if pd.notna(row['logs Ngày Phê duyệt']) and row['logs Ngày Phê duyệt'] != row['store_Ngày Phê duyệt']
+            else '',
             axis=1
         )
 
@@ -388,16 +401,14 @@ def processing_logs(logs_df, current_df):
             'logs Ngày Chờ duyệt', 'store_Ngày Chờ duyệt', 'Check Chờ Duyệt', 'correct Ngày Chờ duyệt',
             'logs Ngày Phê duyệt', 'store_Ngày Phê duyệt', 'Check Phê Duyệt', 'correct Ngày Phê duyệt'
         ]]
-        return final_result
-        # # Xuất file Excel
-        # final_result.to_excel("ket_qua_so_sanh.xlsx", index=False)
 
-        # # In thử kết quả
-        # print(final_result)
+        return final_result
+
     except Exception as e:
         traceback.print_exc()
         send_log(f"Lỗi {e}", "main")
         return None
+
 
 def tele_logs(df, df_current, token):
   try:
