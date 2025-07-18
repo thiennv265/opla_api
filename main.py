@@ -476,7 +476,7 @@ def api_opla(
     try:
         if secrets == 'chucm@ym@n8686':
             if cache.get(token, {}).get("stores") is None:
-                data_stores = getdata(token)
+                getdata(token)
             df = pd.DataFrame(cache[token]["stores"])
             if limit:
                 df = df.iloc[:limit]
@@ -527,7 +527,7 @@ def api_logs(token: str = Query(...),secrets: str = Query(...),fields: List[str]
     try:
         if secrets == 'chucm@ym@n8686':
             if cache.get(token, {}).get("stage_logs") is None:
-                data_stores = getdata(token)
+                getdata(token)
             df = pd.DataFrame(cache[token]["stage_logs"])
             df_current = pd.DataFrame(cache[token]["stores"])
             expected_cols = ["store_id","store_short_id","store_Ngày Chờ duyệt","store_Ngày Phê duyệt"]
@@ -589,7 +589,7 @@ def api_lead(
     try:
         if secrets != 'chucm@ym@n8686': return {}
         # if cache.get(token, {}).get("leads") is None:
-        data_leads = getleads(token)
+        getleads(token)
         df = cache[token]["leads"]
         if fields: df = df[[col for col in fields if col in df.columns]]
         if limit: df = df.iloc[:limit]
@@ -635,7 +635,8 @@ def api_f5(token: str = Query(...), secrets: str = Query(...)):
   if secrets == 'chucm@ym@n8686':
     if cache.get(token, {}).get("data") is not None:
         del cache[token]
-    data_stores = getdata(token)
+    getdata(token)
+    getleads(token)
     tele_logs(cache[token]["stage_logs"], cache[token]["stores"], token)
     tele_stores(cache[token]["stores"], token)
     send_log("Refreshed!", "main")
