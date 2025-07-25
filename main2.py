@@ -762,10 +762,7 @@ async def api_opla(
                 valid_fields = [col for col in fields if col in df.columns]
                 df = df[valid_fields]
             if not export or export != 1:
-                safe_json = json.dumps(
-                    df.to_dict(orient="records"),
-                    ignore_nan=True
-                )
+                safe_json = df.to_json(orient="records")
                 return Response(content=safe_json, media_type="application/json")
             elif export == 1:                   
                 output = io.BytesIO()
@@ -824,10 +821,8 @@ async def api_lead(
             df = df.iloc[:limit]
 
         if not export or export != 1:
-                safe_json = json.dumps(
-                    df.to_dict(orient="records"),
-                    ignore_nan=True
-                )
+            safe_json = df.to_json(orient="records")
+            return Response(content=safe_json, media_type="application/json")
 
         elif export == 1:
             output = io.BytesIO()
