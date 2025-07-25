@@ -824,10 +824,10 @@ async def api_lead(
             df = df.iloc[:limit]
 
         if not export or export != 1:
-            return Response(
-                content=json.dumps(df.to_dict(orient="records"), ignore_nan=True),
-                media_type="application/json"
-            )
+                safe_json = json.dumps(
+                    df.to_dict(orient="records"),
+                    ignore_nan=True
+                )
 
         elif export == 1:
             output = io.BytesIO()
