@@ -1,4 +1,5 @@
-import subprocess, io, sys, time, traceback, random
+import subprocess, io, sys, time, traceback
+
 def install_if_missing(package):
   try:
     __import__(package)
@@ -10,10 +11,8 @@ for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl"
 from typing import List
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-import openpyxl
 from rapidfuzz import fuzz, process
 import requests
-import json
 import numpy as np
 import pandas as pd
 # pd.set_option('future.no_silent_downcasting', True)
@@ -22,10 +21,7 @@ from datetime import datetime, timezone, timedelta
 from threading import Lock
 from fastapi.responses import JSONResponse
 import simplejson as json
-import logging
-import re
-import aiohttp
-import asyncio
+import logging, re, aiohttp, asyncio, random, openpyxl, json
 telegram_token = "7069011696:AAHTEO8CmfHKebxAh8TBjMb73wKZt6nbDFg"
 app = FastAPI()
 cache = {}
@@ -119,7 +115,8 @@ async def log_masked_requests(request: Request, call_next):
     msg_print = f"\033[91m{client_ip}\033[0m - {method} {masked_url} - {color_status(status_code)} - {duration_ms:.2f}s"
     logger.info(msg_print)
     msg_sendlog = f"{client_ip} - {method} {masked_url} - {status_code} - {duration_ms:.2f}s"
-    send_log(msg_sendlog,"main")
+    if status_code != 404:
+        send_log(msg_sendlog,"main")
     return response
 
 def total_time(start, stop):
@@ -551,6 +548,7 @@ async def fetch_opportunities_queue(token):
     store_logs = await dedup_dicts_smart(raw_logs)
     sto = get_current_time_str()
     stop = time.time()
+    stop_flag.clear()
     msgg = f"   {sta} -> {sto}: {stats['total_bytes'] / (1024 * 1024):.2f} MB - {len(store_records)} store records + {len(store_logs)} log records - {total_time(start, stop)}"   
     print (msgg)
     send_log(msgg,"main")
@@ -648,7 +646,7 @@ async def update_dates_from_df(df: pd.DataFrame, token: str) -> pd.DataFrame:
     async with aiohttp.ClientSession() as session:
         tasks = []
         task_refs = []
-
+        
         for idx, row in df.iterrows():
             store_id = row["store_id"]
             put_url = f"https://api-admin.oplacrm.com/api/public/opportunities/{store_id}"
@@ -674,6 +672,11 @@ async def update_dates_from_df(df: pd.DataFrame, token: str) -> pd.DataFrame:
                 task_refs.append((idx, "PUT Phê duyệt"))
 
         total_put = len(tasks)
+        if total_put == 0:
+            msgg = "✅ Không có bản ghi nào cần PUT"
+            print(msgg)
+            send_log(msgg, "update log")
+            return df
         results = await asyncio.gather(*tasks)
 
         failed_tasks = []
