@@ -1,12 +1,11 @@
-import subprocess, io, sys, time, traceback
-
+import subprocess, io, sys, time, traceback, random
 def install_if_missing(package):
   try:
     __import__(package)
   except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--break-system-packages"])
 # Cần kiểm tra và cài các thư viện ngoài
-for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl", "numpy", "simplejson", "openpyxl", "rapidfuzz", "tqdm"]:
+for pkg in ["requests", "pandas", "fastapi", "cachetools", "urllib3", "openpyxl", "numpy", "simplejson", "asyncio", "rapidfuzz", "aiohttp"]:
   install_if_missing(pkg)
 from typing import List
 import urllib3
@@ -27,7 +26,6 @@ import logging
 import re
 import aiohttp
 import asyncio
-import time, random
 telegram_token = "7069011696:AAHTEO8CmfHKebxAh8TBjMb73wKZt6nbDFg"
 app = FastAPI()
 cache = {}
