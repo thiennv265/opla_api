@@ -20,7 +20,7 @@ from fastapi import FastAPI, Query, Response, Request, HTTPException
 from datetime import datetime, timezone, timedelta
 from threading import Lock
 from fastapi.responses import JSONResponse
-import simplejson as json
+# import simplejson as json
 import logging, re, aiohttp, asyncio, random, openpyxl, json
 telegram_token = "7069011696:AAHTEO8CmfHKebxAh8TBjMb73wKZt6nbDFg"
 app = FastAPI()
