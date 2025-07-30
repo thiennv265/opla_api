@@ -15,7 +15,7 @@ from rapidfuzz import fuzz, process
 import requests
 import numpy as np
 import pandas as pd
-# pd.set_option('future.no_silent_downcasting', True)
+pd.set_option('future.no_silent_downcasting', True)
 from fastapi import FastAPI, Query, Response, Request, HTTPException
 from datetime import datetime, timezone, timedelta
 from threading import Lock
@@ -27,7 +27,7 @@ app = FastAPI()
 cache = {}
 lock = Lock()
 # Danh sách skip ban đầu (có thể lớn đến 30000)
-skips = list(range(0, 30000, 150))
+skips = list(range(0, 30000, 200))
 
 # Biến cờ dừng toàn cục
 stop_flag = asyncio.Event()
@@ -411,7 +411,7 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
     start = time.time()
     while retries < MAX_RETRIES and not stop_flag.is_set():
         print(f"[W-{worker_id}] 🚀 Fetching {url} (try {retries + 1}/{MAX_RETRIES})")
-        await asyncio.sleep(5)
+        await asyncio.sleep(1)
 
         try:
             async with session.get(url, headers=headers) as response:
@@ -451,7 +451,8 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
                 excluded_keys = ["weight","area","google_map_address","description","stage_compact","amount", "invoice", "invoices", "opportunity_process",
                                "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","opportunities_products","date_closed",
                                "locked","date_closed_actual","discussions","is_parent","source","opportunity_status","project_type","opportunities_contacts",
-                               "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities","date_open"]
+                               "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities","date_open",
+                               "external_id"]
                 special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities","created_at","stage_logs"]
                 for index, item in enumerate(sources):
                     row = {}
@@ -528,7 +529,7 @@ async def fetch_opportunities_queue(token):
     start = time.time()
     # Tạo danh sách URL
     urls = [
-        (f"https://api-admin.oplacrm.com/api/public/opportunities?take=150&skip={skipp - 30 if skipp > 0 else 0}", skipp)
+        (f"https://api-admin.oplacrm.com/api/public/v1/opportunities?take=200&skip={skipp - 30 if skipp > 0 else 0}", skipp)
         for skipp in skips
     ]
     stats = {"total_items":0, "total_bytes":0}
@@ -541,7 +542,7 @@ async def fetch_opportunities_queue(token):
         # Tạo 3 worker chạy song song
         tasks = [
             fetch_worker(i + 1, queue, session, stats, token)
-            for i in range(3)
+            for i in range(4)
         ]
         await asyncio.gather(*tasks)
     store_records = await dedup_dicts_smart(raw_rows)
