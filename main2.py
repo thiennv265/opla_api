@@ -333,7 +333,7 @@ async def getleads(token: str):
 async def processing_logs(logs_df, current_df):
     try:
         # Xử lý datetime và chuẩn hóa stage
-        logs_df['datetime'] = pd.to_datetime(logs_df['datetime'])
+        logs_df['datetime'] = pd.to_datetime(logs_df['datetime'], format = "mixed")
         logs_df['stage'] = logs_df['stage'].str.strip()
 
         # Lấy ngày Chờ duyệt (mới nhất)
