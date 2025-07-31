@@ -142,7 +142,7 @@ def convert_utc_to_gmt7(dt_str: str) -> str:
     """
     try:
         # Parse từ chuỗi có timezone UTC
-        dt_utc = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S.%f%z")
+        dt_utc = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S%z")
         # Chuyển sang GMT+7
         gmt7 = dt_utc.astimezone(timezone(timedelta(hours=7)))
         return str(gmt7)
