@@ -135,21 +135,21 @@ def appendToRow(myDict: dict, key: str, value: str):
  
 def convert_utc_to_gmt7(dt_str: str) -> str:
     """
-    Chuyển chuỗi thời gian ISO UTC (có định dạng: 2025-06-26T05:09:58.660403+00:00)
+    Chuyển chuỗi thời gian ISO UTC (có định dạng: "2025-07-31T04:55:10.813Z")
     sang định dạng tương ứng trong GMT+7.
 
     Trả về chuỗi ISO format theo GMT+7.
     """
     try:
-        # Parse từ chuỗi có timezone UTC
-        dt_utc = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S%z")
+        # Thay Z thành +00:00 để %z parse được
+        dt_utc = datetime.strptime(dt_str.replace("Z", "+00:00"), "%Y-%m-%dT%H:%M:%S.%f%z")
         # Chuyển sang GMT+7
         gmt7 = dt_utc.astimezone(timezone(timedelta(hours=7)))
-        return str(gmt7)
+        return gmt7.isoformat()
     except Exception as e:
         print(e)
         raise ValueError(f"Không thể parse thời gian: {e}")
-
+      
 async def dedup_dicts_smart(data: list[dict]) -> list[dict]:
     try:
         # return pd.DataFrame(data).drop_duplicates().to_dict(orient="records")
