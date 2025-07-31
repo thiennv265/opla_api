@@ -30,7 +30,8 @@ lock = Lock()
 skips = list(range(0, 30000, 200))
 
 # Biến cờ dừng toàn cục
-stop_flag = asyncio.Event()
+stop_flag_store = asyncio.Event()
+stop_flag_acc = asyncio.Event()
 
 raw_rows = []
 raw_accs = []
@@ -164,10 +165,11 @@ async def dedup_dicts_smart(data: list[dict]) -> list[dict]:
         print(e)
         
 async def fetch_worker(worker_id: int, queue: asyncio.Queue, session, stats: dict, token, data_type):
-    while not queue.empty() and not stop_flag.is_set():
+    st_flag = stop_flag_store if data_type == "store" else stop_flag_acc
+    while not queue.empty() and not st_flag.is_set():
         url, skipp = await queue.get()
         await fetch_url_with_retry(worker_id, url, session, stats, token, data_type)
-
+  
 def send_excel_to_telegram(file_bytes: bytes, filename: str, chat_id: str, bot_token: str):
     files = {
         'document': (filename, file_bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -411,7 +413,8 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
     headers = {"Authorization": token, "User-Agent": random.choice(user_agents), "Connection": "keep-alive", "Accept":"*/*", "Accept-Encoding":"gzip, deflate, br"}
     retries = 0
     start = time.time()
-    while retries < MAX_RETRIES and not stop_flag.is_set():
+    st_flag = stop_flag_store if data_type = "store" else stop_flag_acc
+    while retries < MAX_RETRIES and not st_flag.is_set():
         print(f"[W-{worker_id}] 🚀 Fetching {url} (try {retries + 1}/{MAX_RETRIES})")
         await asyncio.sleep(1)
 
@@ -419,7 +422,7 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
             async with session.get(url, headers=headers) as response:
                 if response.status == 401:
                     print(f"[W-{worker_id}] 🔐 Token sai tại {url}")
-                    stop_flag.set()
+                    st_flag.set()
                     return
 
                 # Retry được với lỗi 5xx
@@ -442,7 +445,7 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
 
                 if not data:
                     print(f"[W-{worker_id}] 🛑 Dừng lại: {url} trả về rỗng")
-                    stop_flag.set()
+                    st_flag.set()
                     return
 
                 # Nếu thành công
@@ -589,7 +592,8 @@ async def fetch_opportunities_queue(token):
 
     sto = get_current_time_str()
     stop = time.time()
-    stop_flag.clear()
+    stop_flag_store.clear()
+    stop_flag_acc.clear()
     msgg = f"   {sta} -> {sto}: {(store_stats['total_bytes'] + acc_stats['total_bytes']) / (1024 * 1024):.2f} MB - {len(enriched_df)} store records + {len(store_logs)} log records - {total_time(start, stop)}"
     print(msgg)
     send_log(msgg, "main")
