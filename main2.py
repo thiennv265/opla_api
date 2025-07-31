@@ -143,7 +143,7 @@ def convert_utc_to_gmt7(dt_str: str) -> str:
     """
     try:
         # Thay Z thành +00:00 để %z parse được
-        dt_utc = datetime.strptime(dt_str.replace("Z", "+00:00"), "%Y-%m-%dT%H:%M:%S.%f%z")
+        dt_utc = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
         # Chuyển sang GMT+7
         gmt7 = dt_utc.astimezone(timezone(timedelta(hours=7)))
         return gmt7.isoformat()
@@ -154,6 +154,7 @@ def convert_utc_to_gmt7(dt_str: str) -> str:
 async def dedup_dicts_smart(data: list[dict]) -> list[dict]:
     try:
         # return pd.DataFrame(data).drop_duplicates().to_dict(orient="records")
+        # print(data[:2])
         df = pd.DataFrame(data).drop_duplicates()
         df.replace([np.inf, -np.inf], np.nan, inplace=True)
         df = df.where(pd.notnull(df), None)
@@ -162,10 +163,10 @@ async def dedup_dicts_smart(data: list[dict]) -> list[dict]:
         traceback.print_exc()
         print(e)
         
-async def fetch_worker(worker_id: int, queue: asyncio.Queue, session, stats: dict, token):
+async def fetch_worker(worker_id: int, queue: asyncio.Queue, session, stats: dict, token, data_type):
     while not queue.empty() and not stop_flag.is_set():
         url, skipp = await queue.get()
-        await fetch_url_with_retry(worker_id, url, session, stats, token)
+        await fetch_url_with_retry(worker_id, url, session, stats, token, data_type)
 
 def send_excel_to_telegram(file_bytes: bytes, filename: str, chat_id: str, bot_token: str):
     files = {
@@ -303,7 +304,7 @@ async def getleads(token: str):
                             elif key == "id":
                                 appendToRow(row, 'lead_id', value)
                             elif key == "created_at":
-                                appendToRow(row, 'created_at', value[:10])
+                                appendToRow(row, 'created_at', value[:19])
                             elif key == "owner":
                                 appendToRow(row, 'owner', value['full_name'])
                                 appendToRow(row, 'owner_id', value['external_id'])
@@ -406,7 +407,7 @@ async def processing_logs(logs_df, current_df):
         send_log(f"Lỗi {e}", "main")
         return None
         
-async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, token, type = "store"):
+async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, token, data_type = "store"):
     headers = {"Authorization": token, "User-Agent": random.choice(user_agents), "Connection": "keep-alive", "Accept":"*/*", "Accept-Encoding":"gzip, deflate, br"}
     retries = 0
     start = time.time()
@@ -449,7 +450,7 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
                 size = len(json.dumps(data).encode("utf-8"))
                 stats["total_items"] += count
                 stats["total_bytes"] += size
-                if type == "store":
+                if data_type == "store":
                     excluded_keys = ["weight","area","google_map_address","description","stage_compact","amount", "invoice", "invoices", "opportunity_process",
                                    "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","opportunities_products","date_closed",
                                    "locked","date_closed_actual","discussions","is_parent","source","opportunity_status","project_type","opportunities_contacts",
@@ -464,7 +465,7 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
                             if key not in special_keys:
                               appendToRow(row, f'store_{key}',value)
                             elif key == "created_at":
-                              appendToRow(row, f'store_{key}',value[:10])
+                              appendToRow(row, f'store_{key}',value[:19])
                             elif key == "stage_logs":
                               # print(len(value))
                               for i in value:
@@ -472,7 +473,7 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
                                 appendToRow(row_log, f'store_id',item["id"])
                                 appendToRow(row_log, f'store_short_id',item["short_id"])
                                 appendToRow(row_log, f'creator',i["creator"]["email"])
-                                appendToRow(row_log, f'datetime', convert_utc_to_gmt7(i["created_at"]))
+                                appendToRow(row_log, f'datetime', convert_utc_to_gmt7(i["created_at"][:19]))
                                 appendToRow(row_log, f'stage',i["new_stage"])
                                 raw_logs.append(row_log)
                             elif key =="custom_field_opportunity_values":
@@ -488,14 +489,14 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
                             elif key == "users_opportunities":
                               appendToRow(row, f'store_{key}',value[0]["user"]["email"])
                             elif key == "accounts_opportunities":
-                              appendToRow(row, f'store_m_id',value["account"]["id"])
+                              appendToRow(row, f'store_m_id',value[0]["account"]["id"])
                             else:
                                 appendToRow(row, f'store_{key}',value)
                         raw_rows.append(row)
                     stop = time.time()
                     print(f"[W-{worker_id}] ✅ {count} item từ {url} - {total_time(start, stop)}")
                     return  # kết thúc thành công
-                if type == "acc":
+                if data_type == "acc":
                     excluded_keys = ["address","description","long_name","note","phone","website", "is_public", "source_id", "source",
                                    "industry_id","industry","account_type"]
                     special_keys = ["owner","custom_field_account_values"]
@@ -507,16 +508,18 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
                             if key not in special_keys:
                               appendToRow(row, f'm_{key}',value)
                             elif key == "created_at":
-                              appendToRow(row, f'm_{key}',value[:10])
+                              appendToRow(row, f'm_{key}',value[:19])
+                            elif key == "owner":
+                              appendToRow(row, f'm_{key}',value["full_name"])
                             elif key == "custom_field_account_values":
-                              for k1 in v:
                                 excluded_keys_mex = ["34. Link ảnh","21. Phần mềm bán hàng *","28. Ghi chú trạng thái","27. Trạng thái ký kết *","29. Lý do Không Hợp Lệ",
                                                      "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng","20. ADO","23. Giá món trung bình *","24. Link gian hàng SPF",
                                                     "25. Link gian hàng GF", "27. Link gian hàng Google Review","33. Link gian hàng BeF","account_type"]
-                                n = k1["custom_field"]["name"]
-                                vl = k1["value"]
-                                if n not in excluded_keys_mex:
-                                  appendToRow(row, f'm_{n}',vl)
+                                for i in value:
+                                    n = i["custom_field"]["name"]
+                                    vl = i["value"]
+                                    if n not in excluded_keys_mex:
+                                      appendToRow(row, f'm_{n}',vl)
                             else:
                                 appendToRow(row, f'm_{key}',value)
                         raw_accs.append(row)
@@ -526,6 +529,7 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
 
         except Exception as e:
             stop = time.time()
+            traceback.print_exc()
             print(f"[W-{worker_id}] ❗ Lỗi: {e} tại {url} - {total_time(start, stop)}")
             retries += 1
 
@@ -586,19 +590,19 @@ async def fetch_opportunities_queue(token):
     sto = get_current_time_str()
     stop = time.time()
     stop_flag.clear()
-    msgg = f"   {sta} -> {sto}: {stats['total_bytes'] / (1024 * 1024):.2f} MB - {len(enriched_df)} store records + {len(store_logs)} log records - {total_time(start, stop)}"
+    msgg = f"   {sta} -> {sto}: {(store_stats['total_bytes'] + acc_stats['total_bytes']) / (1024 * 1024):.2f} MB - {len(enriched_df)} store records + {len(store_logs)} log records - {total_time(start, stop)}"
     print(msgg)
     send_log(msgg, "main")
 
     async with asyncio.Lock():
-        if len(enriched_store_records) > 0:
+        if len(enriched_df) > 0:
             if token not in cache:
                 cache[token] = {}
             cache[token]["stores"] = enriched_df
             cache[token]["stage_logs"] = store_logs
             cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
 
-    return [enriched_df, store_logs]
+    # return [enriched_df, store_logs]
 
 
 def convert_all_columns_to_str(df: pd.DataFrame) -> pd.DataFrame:
