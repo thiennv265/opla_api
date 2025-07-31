@@ -33,6 +33,7 @@ skips = list(range(0, 30000, 200))
 stop_flag = asyncio.Event()
 
 raw_rows = []
+raw_accs = []
 raw_logs = []
 MAX_RETRIES = 10
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -405,7 +406,7 @@ async def processing_logs(logs_df, current_df):
         send_log(f"Lỗi {e}", "main")
         return None
         
-async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, token):
+async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, token, type = "store"):
     headers = {"Authorization": token, "User-Agent": random.choice(user_agents), "Connection": "keep-alive", "Accept":"*/*", "Accept-Encoding":"gzip, deflate, br"}
     retries = 0
     start = time.time()
@@ -448,74 +449,80 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
                 size = len(json.dumps(data).encode("utf-8"))
                 stats["total_items"] += count
                 stats["total_bytes"] += size
-                excluded_keys = ["weight","area","google_map_address","description","stage_compact","amount", "invoice", "invoices", "opportunity_process",
-                               "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","opportunities_products","date_closed",
-                               "locked","date_closed_actual","discussions","is_parent","source","opportunity_status","project_type","opportunities_contacts",
-                               "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities","date_open",
-                               "external_id"]
-                special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities","created_at","stage_logs"]
-                for index, item in enumerate(sources):
-                    row = {}
-                    for key, value in item.items():
-                      # print(key)
-                      if key not in excluded_keys:
-                        if key not in special_keys:
-                          appendToRow(row, f'store_{key}',value)
-                        elif key == "created_at":
-                          appendToRow(row, f'store_{key}',value[:10])
-                        elif key == "stage_logs":
-                          # print(len(value))
-                          for i in value:
-                            row_log = {}
-                            appendToRow(row_log, f'store_id',item["id"])
-                            appendToRow(row_log, f'store_short_id',item["short_id"])
-                            appendToRow(row_log, f'creator',i["creator"]["email"])
-                            appendToRow(row_log, f'datetime', convert_utc_to_gmt7(i["created_at"]))
-                            appendToRow(row_log, f'stage',i["new_stage"])
-                            raw_logs.append(row_log)
-                        elif key =="custom_field_opportunity_values":
-                          for i in value:
-                            # print(i["custom_field"])
-                            if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *","Quận (cũ)",
-                                                                 "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng"]:
-                                appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
-                        elif key == "opportunity_process_stage":
-                          appendToRow(row, f'store_{key}',value["opportunity_stage"]["name"])
-                        elif key == "owner":
-                          appendToRow(row, f'store_{key}',value["email"])
-                        elif key == "users_opportunities":
-                          appendToRow(row, f'store_{key}',value[0]["user"]["email"])
-                        elif key == "accounts_opportunities":
-                          for k, v in value[0]["account"].items():
-                            included_keys = ["id","name","short_id","account_type","owner","custom_field_account_values","tax_identification_number"]
-                            if k in included_keys:
-                              if k == "account_type":
-                                appendToRow(row, f'mex_{k}',v)
-                              elif k == "tax_identification_number":
-                                appendToRow(row, f'mex_tax_id',v)
-                              elif k == "owner":
-                                appendToRow(row, f'mex_{k}',v["email"])
-                              elif k == "custom_field_account_values":
-                                for k1 in v:
-                                  excluded_keys_mex = ["34. Link ảnh","21. Phần mềm bán hàng *","28. Ghi chú trạng thái","27. Trạng thái ký kết *","29. Lý do Không Hợp Lệ",
-                                                       "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng","20. ADO","23. Giá món trung bình *","24. Link gian hàng SPF",
-                                                      "25. Link gian hàng GF", "27. Link gian hàng Google Review","33. Link gian hàng BeF","account_type"]
-                                  n = k1["custom_field"]["name"]
-                                  vl = k1["value"]
-                                  if k1["custom_field"]["master_data_custom_fields"]:
-                                    for i in k1["custom_field"]["master_data_custom_fields"]:
-                                      if i["id"] == vl:
-                                        vl = i["value"]
-                                  if n not in excluded_keys_mex:
-                                    appendToRow(row, f'mex_{n}',vl)
-                              else:
-                                appendToRow(row, f'mex_{k}',v)
-                        else:
-                            appendToRow(row, f'store_{key}',value)
-                    raw_rows.append(row)
-                stop = time.time()
-                print(f"[W-{worker_id}] ✅ {count} item từ {url} - {total_time(start, stop)}")
-                return  # kết thúc thành công
+                if type == "store":
+                    excluded_keys = ["weight","area","google_map_address","description","stage_compact","amount", "invoice", "invoices", "opportunity_process",
+                                   "opportunity_process_stage_id","tax_inclusive_amount","forecast","opportunities_joint","opportunities_products","date_closed",
+                                   "locked","date_closed_actual","discussions","is_parent","source","opportunity_status","project_type","opportunities_contacts",
+                                   "Error","notes","parent_opportunity_id","parent_opportunity","opportunities_children","opportunity_type_id","activities","date_open",
+                                   "external_id"]
+                    special_keys = ["custom_field_opportunity_values","opportunity_process_stage","owner","users_opportunities","accounts_opportunities","created_at","stage_logs"]
+                    for index, item in enumerate(sources):
+                        row = {}
+                        for key, value in item.items():
+                          # print(key)
+                          if key not in excluded_keys:
+                            if key not in special_keys:
+                              appendToRow(row, f'store_{key}',value)
+                            elif key == "created_at":
+                              appendToRow(row, f'store_{key}',value[:10])
+                            elif key == "stage_logs":
+                              # print(len(value))
+                              for i in value:
+                                row_log = {}
+                                appendToRow(row_log, f'store_id',item["id"])
+                                appendToRow(row_log, f'store_short_id',item["short_id"])
+                                appendToRow(row_log, f'creator',i["creator"]["email"])
+                                appendToRow(row_log, f'datetime', convert_utc_to_gmt7(i["created_at"]))
+                                appendToRow(row_log, f'stage',i["new_stage"])
+                                raw_logs.append(row_log)
+                            elif key =="custom_field_opportunity_values":
+                              for i in value:
+                                # print(i["custom_field"])
+                                if i["custom_field"]["name"] not in ["20. ADO","23. Giá món trung bình *","18. Vĩ độ","19. Kinh độ","21. Quận *","Quận (cũ)",
+                                                                     "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng"]:
+                                    appendToRow(row, f'store_{i["custom_field"]["name"]}',i["value"])
+                            elif key == "opportunity_process_stage":
+                              appendToRow(row, f'store_{key}',value["opportunity_stage"]["name"])
+                            elif key == "owner":
+                              appendToRow(row, f'store_{key}',value["email"])
+                            elif key == "users_opportunities":
+                              appendToRow(row, f'store_{key}',value[0]["user"]["email"])
+                            elif key == "accounts_opportunities":
+                              appendToRow(row, f'store_m_id',value["account"]["id"])
+                            else:
+                                appendToRow(row, f'store_{key}',value)
+                        raw_rows.append(row)
+                    stop = time.time()
+                    print(f"[W-{worker_id}] ✅ {count} item từ {url} - {total_time(start, stop)}")
+                    return  # kết thúc thành công
+                if type == "acc":
+                    excluded_keys = ["address","description","long_name","note","phone","website", "is_public", "source_id", "source",
+                                   "industry_id","industry","account_type"]
+                    special_keys = ["owner","custom_field_account_values"]
+                    for index, item in enumerate(sources):
+                        row = {}
+                        for key, value in item.items():
+                          # print(key)
+                          if key not in excluded_keys:
+                            if key not in special_keys:
+                              appendToRow(row, f'm_{key}',value)
+                            elif key == "created_at":
+                              appendToRow(row, f'm_{key}',value[:10])
+                            elif key == "custom_field_account_values":
+                              for k1 in v:
+                                excluded_keys_mex = ["34. Link ảnh","21. Phần mềm bán hàng *","28. Ghi chú trạng thái","27. Trạng thái ký kết *","29. Lý do Không Hợp Lệ",
+                                                     "24. Phần mềm bán hàng *","23. Khung giờ hoạt động 2","25. Ghi Chú Riêng","20. ADO","23. Giá món trung bình *","24. Link gian hàng SPF",
+                                                    "25. Link gian hàng GF", "27. Link gian hàng Google Review","33. Link gian hàng BeF","account_type"]
+                                n = k1["custom_field"]["name"]
+                                vl = k1["value"]
+                                if n not in excluded_keys_mex:
+                                  appendToRow(row, f'm_{n}',vl)
+                            else:
+                                appendToRow(row, f'm_{key}',value)
+                        raw_accs.append(row)
+                    stop = time.time()
+                    print(f"[W-{worker_id}] ✅ {count} item từ {url} - {total_time(start, stop)}")
+                    return  # kết thúc thành công
 
         except Exception as e:
             stop = time.time()
@@ -527,39 +534,72 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
 async def fetch_opportunities_queue(token):
     sta = get_current_time_str()
     start = time.time()
-    # Tạo danh sách URL
-    urls = [
+
+    # Tạo danh sách URL cho store
+    store_urls = [
         (f"https://api-admin.oplacrm.com/api/public/v1/opportunities?take=200&skip={skipp - 30 if skipp > 0 else 0}", skipp)
         for skipp in skips
     ]
-    stats = {"total_items":0, "total_bytes":0}
-    queue = asyncio.Queue()
-    for item in urls:
-        await queue.put(item)
-    connector = aiohttp.TCPConnector(limit=3)
-    timeout = aiohttp.ClientTimeout(total= 240, connect =60, sock_read= 240)
+
+    # Tạo danh sách URL cho acc (ví dụ URL cố định hoặc tùy `skips`)
+    acc_urls = [
+        (f"https://api-admin.oplacrm.com/api/public/accounts?take=200&skip={skipp - 30 if skipp > 0 else 0}", skipp)
+        for skipp in skips
+    ]
+
+    store_stats = {"total_items": 0, "total_bytes": 0}
+    acc_stats = {"total_items": 0, "total_bytes": 0}
+    store_queue = asyncio.Queue()
+    acc_queue = asyncio.Queue()
+
+    for item in store_urls:
+        await store_queue.put(item)
+    for item in acc_urls:
+        await acc_queue.put(item)
+
+    connector = aiohttp.TCPConnector(limit=4)
+    timeout = aiohttp.ClientTimeout(total=240, connect=60, sock_read=240)
+
     async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-        # Tạo 3 worker chạy song song
-        tasks = [
-            fetch_worker(i + 1, queue, session, stats, token)
+        # Worker fetch store
+        store_tasks = [
+            fetch_worker(i + 1, store_queue, session, store_stats, token, data_type="store")
             for i in range(4)
         ]
-        await asyncio.gather(*tasks)
+
+        # Worker fetch acc (có thể dùng worker riêng nếu xử lý khác)
+        acc_tasks = [
+            fetch_worker(i + 5, acc_queue, session, acc_stats, token, data_type="acc")
+            for i in range(4)  # ví dụ 2 worker cho acc
+        ]
+
+        await asyncio.gather(*(store_tasks + acc_tasks))
+
+    # Dedup dữ liệu
     store_records = await dedup_dicts_smart(raw_rows)
     store_logs = await dedup_dicts_smart(raw_logs)
+    acc_records = await dedup_dicts_smart(raw_accs)  # raw_accs bạn cần khai báo như raw_rows
+
+    # Join acc + store
+    enriched_df = store_records.merge(acc_records, left_on='store_m_id', right_on='m_id', suffixes=('s_', 'm_'))
+
     sto = get_current_time_str()
     stop = time.time()
     stop_flag.clear()
-    msgg = f"   {sta} -> {sto}: {stats['total_bytes'] / (1024 * 1024):.2f} MB - {len(store_records)} store records + {len(store_logs)} log records - {total_time(start, stop)}"   
-    print (msgg)
-    send_log(msgg,"main")
+    msgg = f"   {sta} -> {sto}: {stats['total_bytes'] / (1024 * 1024):.2f} MB - {len(enriched_df)} store records + {len(store_logs)} log records - {total_time(start, stop)}"
+    print(msgg)
+    send_log(msgg, "main")
+
     async with asyncio.Lock():
-      if len(store_records) > 0:
-        if token not in cache: cache[token] = {}
-        cache[token]["stores"] = store_records
-        cache[token]["stage_logs"] = store_logs
-        cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
-    return [store_records, store_logs]
+        if len(enriched_store_records) > 0:
+            if token not in cache:
+                cache[token] = {}
+            cache[token]["stores"] = enriched_df
+            cache[token]["stage_logs"] = store_logs
+            cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
+
+    return [enriched_df, store_logs]
+
 
 def convert_all_columns_to_str(df: pd.DataFrame) -> pd.DataFrame:
     """
