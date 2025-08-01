@@ -318,7 +318,11 @@ async def getleads(token: str):
         dunique = await dedup_dicts_smart(raw_rows)
 
         sto = get_current_time_str()
-        old_lead = len(cache[token]["leads"])
+        try:
+            old_lead = len(cache[token]["leads"])
+        except:
+            old_lead = 0  
+ 
         async with asyncio.Lock():
             if len(dunique) > 0:
                 if token not in cache:
@@ -596,8 +600,16 @@ async def fetch_opportunities_queue(token):
     stop = time.time()
     stop_flag_store.clear()
     stop_flag_acc.clear()
-    old_store = len(cache[token]["stores"])
-    old_stage = len(cache[token]["stage_logs"])
+    try:
+        old_store = len(cache[token]["stores"])
+    except:
+        old_store = 0
+      
+    try:
+        old_stage = len(cache[token]["stage_logs"])
+    except:
+        old_stage = 0  
+
     async with asyncio.Lock():
         if len(enriched_df) > 0:
             if token not in cache:
