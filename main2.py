@@ -318,14 +318,16 @@ async def getleads(token: str):
         dunique = await dedup_dicts_smart(raw_rows)
 
         sto = get_current_time_str()
+        old_lead = len(cache[token]["leads"])
         async with asyncio.Lock():
             if len(dunique) > 0:
                 if token not in cache:
                     cache[token] = {}
                 cache[token]["leads"] = dunique
                 cache[token]["updated_leads"] = get_current_time_str()
+        new_lead = len(cache[token]["leads"])
         stop = time.time()
-        msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - {len(dunique)} lead records - {total_time(start, stop)}"
+        msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - lead: {old_lead} -> {new_lead} - {total_time(start, stop)}"
         send_log(msgg, "get leads")
         print(msgg)
         return dunique
@@ -594,10 +596,8 @@ async def fetch_opportunities_queue(token):
     stop = time.time()
     stop_flag_store.clear()
     stop_flag_acc.clear()
-    msgg = f"   {sta} -> {sto}: {(store_stats['total_bytes'] + acc_stats['total_bytes']) / (1024 * 1024):.2f} MB - {len(enriched_df)} store records + {len(store_logs)} log records - {total_time(start, stop)}"
-    print(msgg)
-    send_log(msgg, "main")
-
+    old_store = len(cache[token]["stores"])
+    old_stage = len(cache[token]["stage_logs"])
     async with asyncio.Lock():
         if len(enriched_df) > 0:
             if token not in cache:
@@ -605,8 +605,13 @@ async def fetch_opportunities_queue(token):
             cache[token]["stores"] = enriched_df
             cache[token]["stage_logs"] = store_logs
             cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
+    new_store = len(cache[token]["stores"])
+    new_stage = len(cache[token]["stage_logs"])
+    msgg = f"   {sta} -> {sto}: {(store_stats['total_bytes'] + acc_stats['total_bytes']) / (1024 * 1024):.2f} MB - store: {old_store} -> {new_store} - log: {old_stage} -> {new_stage} - {total_time(start, stop)}"
+    print(msgg)
+    send_log(msgg, "main")
 
-    # return [enriched_df, store_logs]
+# return [enriched_df, store_logs]
 
 
 def convert_all_columns_to_str(df: pd.DataFrame) -> pd.DataFrame:
