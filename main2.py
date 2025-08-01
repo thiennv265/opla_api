@@ -413,7 +413,7 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
     headers = {"Authorization": token, "User-Agent": random.choice(user_agents), "Connection": "keep-alive", "Accept":"*/*", "Accept-Encoding":"gzip, deflate, br"}
     retries = 0
     start = time.time()
-    st_flag = stop_flag_store if data_type = "store" else stop_flag_acc
+    st_flag = stop_flag_store if data_type == "store" else stop_flag_acc
     while retries < MAX_RETRIES and not st_flag.is_set():
         print(f"[W-{worker_id}] 🚀 Fetching {url} (try {retries + 1}/{MAX_RETRIES})")
         await asyncio.sleep(1)
