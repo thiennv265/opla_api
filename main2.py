@@ -342,21 +342,24 @@ async def getleads(token: str):
 
 async def processing_logs(logs_df, current_df):
     try:
-        # Xử lý datetime và chuẩn hóa stage
-        logs_df['datetime'] = pd.to_datetime(logs_df['datetime'], format = "mixed")
-        logs_df['stage'] = logs_df['stage'].str.strip()
+        # Chuẩn hóa store_id và stage
+        logs_df['store_id'] = logs_df['store_id'].astype(str).str.strip().str.lower()
+        logs_df['stage'] = logs_df['stage'].astype(str).str.strip().str.lower()
 
-        # Lấy ngày Chờ duyệt (mới nhất)
+        # Xử lý datetime
+        logs_df['datetime'] = pd.to_datetime(logs_df['datetime'], format='mixed', errors='coerce')
+
+        # Lấy ngày "Chờ duyệt" (mới nhất)
         cho_duyet = (
-            logs_df[logs_df['stage'] == 'Chờ Duyệt']
+            logs_df[logs_df['stage'] == 'chờ duyệt']
             .drop_duplicates('store_id', keep='first')[['store_id', 'datetime']]
             .rename(columns={'datetime': 'logs Ngày Chờ duyệt'})
         )
         cho_duyet['logs Ngày Chờ duyệt'] = cho_duyet['logs Ngày Chờ duyệt'].dt.strftime('%Y-%m-%d')
 
-        # Lấy ngày Phê duyệt (mới nhất từ "Cần điều chỉnh", "Đủ thông tin")
+        # Lấy ngày "Phê duyệt" (mới nhất từ các stage hợp lệ)
         phe_duyet = (
-            logs_df[logs_df['stage'].isin(['Cần điều chỉnh', 'Đủ thông tin'])]
+            logs_df[logs_df['stage'].isin(['cần điều chỉnh', 'đủ thông tin'])]
             .drop_duplicates('store_id', keep='first')[['store_id', 'datetime']]
             .rename(columns={'datetime': 'logs Ngày Phê duyệt'})
         )
@@ -365,29 +368,27 @@ async def processing_logs(logs_df, current_df):
         # Gộp logs lại
         logs_summary = cho_duyet.merge(phe_duyet, on='store_id', how='outer')
 
-        # 🔧 Dùng .copy() để tránh SettingWithCopyWarning
+        # Chuẩn hóa current_df
         current_df = current_df.copy()
+        current_df['store_id'] = current_df['store_id'].astype(str).str.strip().str.lower()
 
-        # Chuyển ngày trong current về dạng chuỗi (để so sánh và export)
         current_df['store_Ngày Chờ duyệt'] = pd.to_datetime(
             current_df['store_Ngày Chờ duyệt'], errors='coerce'
         ).dt.strftime('%Y-%m-%d')
-
         current_df['store_Ngày Phê duyệt'] = pd.to_datetime(
             current_df['store_Ngày Phê duyệt'], errors='coerce'
         ).dt.strftime('%Y-%m-%d')
 
-        # Chọn các cột cần từ current và gộp với logs
+        # Merge để đối chiếu ngày
         merged = current_df[[
-            'store_id', 'store_short_id',
-            'store_Ngày Chờ duyệt', 'store_Ngày Phê duyệt'
+            'store_id', 'store_short_id', 'store_Ngày Chờ duyệt', 'store_Ngày Phê duyệt'
         ]].merge(logs_summary, on='store_id', how='left')
 
-        # So sánh ngày
+        # So sánh
         merged['Check Chờ Duyệt'] = merged['store_Ngày Chờ duyệt'] == merged['logs Ngày Chờ duyệt']
         merged['Check Phê Duyệt'] = merged['store_Ngày Phê duyệt'] == merged['logs Ngày Phê duyệt']
 
-        # Tạo cột correct nếu lệch
+        # Gợi ý cập nhật nếu lệch
         merged['correct Ngày Chờ duyệt'] = merged.apply(
             lambda row: row['logs Ngày Chờ duyệt']
             if pd.notna(row['logs Ngày Chờ duyệt']) and row['logs Ngày Chờ duyệt'] != row['store_Ngày Chờ duyệt']
@@ -401,20 +402,19 @@ async def processing_logs(logs_df, current_df):
             axis=1
         )
 
-        # Kết quả cuối cùng
+        # Trả về kết quả cuối cùng
         final_result = merged[[
             'store_id', 'store_short_id',
             'logs Ngày Chờ duyệt', 'store_Ngày Chờ duyệt', 'Check Chờ Duyệt', 'correct Ngày Chờ duyệt',
             'logs Ngày Phê duyệt', 'store_Ngày Phê duyệt', 'Check Phê Duyệt', 'correct Ngày Phê duyệt'
         ]]
-
         return final_result
 
     except Exception as e:
         traceback.print_exc()
         send_log(f"Lỗi {e}", "main")
         return None
-        
+
 async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, token, data_type = "store"):
     headers = {"Authorization": token, "User-Agent": random.choice(user_agents), "Connection": "keep-alive", "Accept":"*/*", "Accept-Encoding":"gzip, deflate, br"}
     retries = 0
