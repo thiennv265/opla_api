@@ -156,9 +156,12 @@ async def dedup_dicts_smart(data: list[dict]) -> list[dict]:
     try:
         # return pd.DataFrame(data).drop_duplicates().to_dict(orient="records")
         # print(data[:2])
+        sta = len(data)
         df = pd.DataFrame(data).drop_duplicates()
         df.replace([np.inf, -np.inf], np.nan, inplace=True)
         df = df.where(pd.notnull(df), None)
+        sto = len(data)
+        print(f"From {sta} -> To {sto} :)")
         return df
     except Exception as e:
         traceback.print_exc()
