@@ -379,10 +379,12 @@ async def processing_logs(logs_df, current_df):
             current_df['store_Ngày Phê duyệt'], errors='coerce'
         ).dt.strftime('%Y-%m-%d')
 
-        # Merge để đối chiếu ngày
-        merged = current_df[[
-            'store_id', 'store_short_id', 'store_Ngày Chờ duyệt', 'store_Ngày Phê duyệt'
-        ]].merge(logs_summary, on='store_id', how='left')
+        merged = current_df[
+            ['store_id', 'store_short_id', 'store_Ngày Chờ duyệt', 'store_Ngày Phê duyệt']
+        ].merge(logs_summary, on='store_id', how='left')
+        
+        # Xóa các dòng trùng lặp theo toàn bộ cột
+        merged = merged.drop_duplicates()
 
         # So sánh
         merged['Check Chờ Duyệt'] = merged['store_Ngày Chờ duyệt'] == merged['logs Ngày Chờ duyệt']
