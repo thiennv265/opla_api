@@ -152,12 +152,15 @@ def convert_utc_to_gmt7(dt_str: str) -> str:
         print(e)
         raise ValueError(f"Không thể parse thời gian: {e}")
       
-async def dedup_dicts_smart(data: list[dict]) -> list[dict]:
+async def dedup_dicts_smart(data: list[dict], subset = None) -> list[dict]:
     try:
         # return pd.DataFrame(data).drop_duplicates().to_dict(orient="records")
         # print(data[:2])
         sta = len(data)
-        df = pd.DataFrame(data).drop_duplicates()
+        if subset:
+            df = pd.DataFrame(data).drop_duplicates(subset=subset,keep="first")
+        else:
+            df = pd.DataFrame(data).drop_duplicates()
         df.replace([np.inf, -np.inf], np.nan, inplace=True)
         df = df.where(pd.notnull(df), None)
         sto = len(data)
@@ -594,12 +597,13 @@ async def fetch_opportunities_queue(token):
         await asyncio.gather(*(store_tasks + acc_tasks))
 
     # Dedup dữ liệu
-    store_records = await dedup_dicts_smart(raw_rows)
+    store_records = await dedup_dicts_smart(raw_rows, subset=["store_id"])
     store_logs = await dedup_dicts_smart(raw_logs)
-    acc_records = await dedup_dicts_smart(raw_accs)  # raw_accs bạn cần khai báo như raw_rows
+    acc_records = await dedup_dicts_smart(raw_accs, subset = ["m_id"])  # raw_accs bạn cần khai báo như raw_rows
 
     # Join acc + store
     enriched_df = store_records.merge(acc_records, left_on='store_m_id', right_on='m_id', suffixes=('s_', 'm_'))
+    enriched_df = await dedup_dicts_smart(enriched_df, subset=["store_id"])
 
     sto = get_current_time_str()
     stop = time.time()
