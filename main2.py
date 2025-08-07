@@ -254,7 +254,7 @@ async def fetch_batch(session, url, headers, skip, batch_size, w_num):
                     text = await response.text()
                     # print(f"[[W-{w_num}]⚠️ Retry {retries+1}] Non-200 ({response.status}) for skip={skip}: {text}")
         except Exception as e:
-            # print(f"[[W-{w_num}]❌ Retry {retries+1}] Exception for skip={skip}: {e}")
+              print(f"[[W-{w_num}]❌ Retry {retries+1}] Exception for skip={skip}: {e}")
 
         retries += 1
         await asyncio.sleep(RETRY_DELAY)
