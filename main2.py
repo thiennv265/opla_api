@@ -335,12 +335,12 @@ async def getleads(token: str):
                     cache[token] = {}
                 cache[token]["leads"] = dunique
                 cache[token]["updated_leads"] = get_current_time_str()
-        new_lead = len(cache[token]["leads"])
-        stop = time.time()
-        msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - lead: {old_lead} -> {new_lead} - {total_time(start, stop)}"
-        send_log(msgg, "get leads")
-        print(msgg)
-        return dunique
+                new_lead = len(cache[token]["leads"])
+                stop = time.time()
+                msgg = f"   {sta} -> {sto}: {total_bytes / (1024 * 1024):.2f} MB - lead: {old_lead} -> {new_lead} - {total_time(start, stop)}"
+                send_log(msgg, "get leads")
+                print(msgg)
+                return dunique
 
     except Exception as e:
         print(traceback.print_exc())
@@ -626,11 +626,11 @@ async def fetch_opportunities_queue(token):
             cache[token]["stores"] = enriched_df
             cache[token]["stage_logs"] = store_logs
             cache[token]["updated_stores_and_stage_logs"] = get_current_time_str()
-    new_store = len(cache[token]["stores"])
-    new_stage = len(cache[token]["stage_logs"])
-    msgg = f"   {sta} -> {sto}: {(store_stats['total_bytes'] + acc_stats['total_bytes']) / (1024 * 1024):.2f} MB - store: {old_store} -> {new_store} - log: {old_stage} -> {new_stage} - {total_time(start, stop)}"
-    print(msgg)
-    send_log(msgg, "main")
+            new_store = len(cache[token]["stores"])
+            new_stage = len(cache[token]["stage_logs"])
+            msgg = f"   {sta} -> {sto}: {(store_stats['total_bytes'] + acc_stats['total_bytes']) / (1024 * 1024):.2f} MB - store: {old_store} -> {new_store} - log: {old_stage} -> {new_stage} - {total_time(start, stop)}"
+            print(msgg)
+            send_log(msgg, "main")
 
 # return [enriched_df, store_logs]
 
@@ -814,7 +814,7 @@ async def update_dates_from_df(df: pd.DataFrame, token: str) -> pd.DataFrame:
     send_log(msgg,"update log")
     return df
 
-@app.get("/")
+@app.get("/hello")
 async def home():
   return {"hello":":)"}
 
