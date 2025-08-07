@@ -27,7 +27,7 @@ app = FastAPI()
 cache = {}
 lock = Lock()
 # Danh sách skip ban đầu (có thể lớn đến 30000)
-skips = list(range(0, 30000, 200))
+skips = list(range(0, 50000, 200))
 
 # Biến cờ dừng toàn cục
 stop_flag_store = asyncio.Event()
@@ -276,7 +276,7 @@ async def getleads(token: str):
         }
 
         sta = get_current_time_str()
-        raw_rows = []
+        raw_leads = []
         total_bytes = 0
         skip = 0
         should_stop = False
@@ -316,12 +316,12 @@ async def getleads(token: str):
                             elif key == "owner":
                                 appendToRow(row, 'owner', value['full_name'])
                                 appendToRow(row, 'owner_id', value['external_id'])
-                        raw_rows.append(row)
+                        raw_leads.append(row)
 
                 skip += BATCH_SIZE * MAX_WORKERS
 
         # Dedupe in thread
-        dunique = await dedup_dicts_smart(raw_rows)
+        dunique = await dedup_dicts_smart(raw_leads)
 
         sto = get_current_time_str()
         try:
@@ -555,7 +555,10 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
 async def fetch_opportunities_queue(token):
     sta = get_current_time_str()
     start = time.time()
-
+    global raw_rows, raw_logs, raw_accs  # nếu bạn dùng biến toàn cục
+    raw_rows = []
+    raw_logs = []
+    raw_accs = []
     # Tạo danh sách URL cho store
     store_urls = [
         (f"https://api-admin.oplacrm.com/api/public/v1/opportunities?take=200&skip={skipp - 30 if skipp > 0 else 0}", skipp)
@@ -602,8 +605,8 @@ async def fetch_opportunities_queue(token):
     acc_records = await dedup_dicts_smart(raw_accs, subset = ["m_id"])  # raw_accs bạn cần khai báo như raw_rows
 
     # Join acc + store
-    enriched_df = store_records.merge(acc_records, left_on='store_m_id', right_on='m_id', suffixes=('s_', 'm_'))
-    enriched_df = await dedup_dicts_smart(enriched_df, subset=["store_id"])
+    enriched_df = store_records.merge(acc_records, left_on='store_m_id', right_on='m_id', suffixes=('s_', 'm_'), how='left')
+    # enriched_df = await dedup_dicts_smart(enriched_df, subset=["store_id"])
 
     sto = get_current_time_str()
     stop = time.time()
@@ -639,7 +642,7 @@ def convert_all_columns_to_str(df: pd.DataFrame) -> pd.DataFrame:
     """
     Ép toàn bộ các cột trong DataFrame về kiểu str, xử lý cả NaN.
     """
-    return df.applymap(lambda x: '' if pd.isna(x) else str(x))
+    return df.apply(lambda col: col.map(lambda x: '' if pd.isna(x) else str(x)))
     
 async def tele_logs(df, df_current, token):
     try:
@@ -693,7 +696,7 @@ async def tele_stores(df, token):
             bot_token=telegram_token
         )
         stop = time.time()
-        print(f"OK! Tele_Log {total_time(start, stop)}")
+        print(f"OK! Tele_Store {total_time(start, stop)}")
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
