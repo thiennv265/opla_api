@@ -248,18 +248,18 @@ async def fetch_batch(session, url, headers, skip, batch_size, w_num):
             async with session.get(full_url, headers=headers) as response:
                 if response.status == 200:
                     r = await response.json()
-                    print(f"[W-{w_num}] 🚀 Fetching {full_url} +{len(r)} ({retries+1}/{MAX_RETRIES})")
+                    # print(f"[W-{w_num}] 🚀 Fetching {full_url} +{len(r)} ({retries+1}/{MAX_RETRIES})")
                     return r
                 else:
                     text = await response.text()
-                    print(f"[[W-{w_num}]⚠️ Retry {retries+1}] Non-200 ({response.status}) for skip={skip}: {text}")
+                    # print(f"[[W-{w_num}]⚠️ Retry {retries+1}] Non-200 ({response.status}) for skip={skip}: {text}")
         except Exception as e:
-            print(f"[[W-{w_num}]❌ Retry {retries+1}] Exception for skip={skip}: {e}")
+            # print(f"[[W-{w_num}]❌ Retry {retries+1}] Exception for skip={skip}: {e}")
 
         retries += 1
         await asyncio.sleep(RETRY_DELAY)
 
-    print(f"[W-{w_num}]🚫 Failed after {MAX_RETRIES} retries for skip={skip}")
+    # print(f"[W-{w_num}]🚫 Failed after {MAX_RETRIES} retries for skip={skip}")
     return []
 
 # --------- MAIN ASYNC FUNCTION ---------
@@ -429,36 +429,36 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
     start = time.time()
     st_flag = stop_flag_store if data_type == "store" else stop_flag_acc
     while retries < MAX_RETRIES and not st_flag.is_set():
-        print(f"[W-{worker_id}] 🚀 Fetching {url} (try {retries + 1}/{MAX_RETRIES})")
+        # print(f"[W-{worker_id}] 🚀 Fetching {url} (try {retries + 1}/{MAX_RETRIES})")
         await asyncio.sleep(1)
 
         try:
             async with session.get(url, headers=headers) as response:
                 if response.status == 401:
-                    print(f"[W-{worker_id}] 🔐 Token sai tại {url}")
+                    # print(f"[W-{worker_id}] 🔐 Token sai tại {url}")
                     st_flag.set()
                     return
 
                 # Retry được với lỗi 5xx
                 if 500 <= response.status < 600:
-                    print(f"[W-{worker_id}] 🔁 HTTP {response.status} - thử lại {url}")
+                    # print(f"[W-{worker_id}] 🔁 HTTP {response.status} - thử lại {url}")
                     retries += 1
                     await asyncio.sleep(10)
                     continue
 
                 # Không retry với lỗi khác (404, 403...)
                 if response.status != 200:
-                    print(f"[W-{worker_id}] ❌ HTTP {response.status} tại {url} - không retry")
+                    # print(f"[W-{worker_id}] ❌ HTTP {response.status} tại {url} - không retry")
                     break
 
                 data = await response.json()
                 sources = data
                 if not isinstance(data, list):
-                    print(f"[W-{worker_id}] ⚠️ Dữ liệu không phải list: {data}")
+                    # print(f"[W-{worker_id}] ⚠️ Dữ liệu không phải list: {data}")
                     break
 
                 if not data:
-                    print(f"[W-{worker_id}] 🛑 Dừng lại: {url} trả về rỗng")
+                    # print(f"[W-{worker_id}] 🛑 Dừng lại: {url} trả về rỗng")
                     st_flag.set()
                     return
 
@@ -511,7 +511,7 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
                                 appendToRow(row, f'store_{key}',value)
                         raw_rows.append(row)
                     stop = time.time()
-                    print(f"[W-{worker_id}] ✅ {count} item từ {url} - {total_time(start, stop)}")
+                    # print(f"[W-{worker_id}] ✅ {count} item từ {url} - {total_time(start, stop)}")
                     return  # kết thúc thành công
                 if data_type == "acc":
                     excluded_keys = ["address","description","long_name","note","phone","website", "is_public", "source_id", "source",
@@ -541,7 +541,7 @@ async def fetch_url_with_retry(worker_id: int, url: str, session, stats: dict, t
                                 appendToRow(row, f'm_{key}',value)
                         raw_accs.append(row)
                     stop = time.time()
-                    print(f"[W-{worker_id}] ✅ {count} item từ {url} - {total_time(start, stop)}")
+                    # print(f"[W-{worker_id}] ✅ {count} item từ {url} - {total_time(start, stop)}")
                     return  # kết thúc thành công
 
         except Exception as e:
@@ -676,6 +676,7 @@ async def tele_logs(df, df_current, token):
 
 async def tele_stores(df, token):
     try:
+        start = time.time()
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             convert_all_columns_to_str(df).to_excel(writer, index=False, sheet_name="stores")
@@ -691,6 +692,8 @@ async def tele_stores(df, token):
             chat_id="716085753",
             bot_token=telegram_token
         )
+        stop = time.time()
+        print(f"OK! Tele_Log {total_time(start, stop)}")
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
