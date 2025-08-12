@@ -3,27 +3,14 @@ import subprocess
 import sys
 from datetime import datetime
 
-
-def auto_install(packages: dict):
-    """
-    packages: dict dạng {"tên_pip": "tên_import" hoặc None nếu giống nhau}
-    Ví dụ: {"pandas": None, "rapidfuzz": None, "unidecode": None}
-    """
-    for pip_name, import_name in packages.items():
-        try:
-            importlib.import_module(import_name or pip_name)
-        except ImportError:
-            print(f"📦 Chưa có '{pip_name}', đang cài...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
-
-# ======= Gọi hàm auto install =======
-auto_install({
-    "streamlit": None,
-    "pandas": None,
-    "rapidfuzz": None,
-    "unidecode": None,
-    "openpyxl": None
-})
+def install_if_missing(package):
+  try:
+    __import__(package)
+  except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package, "--break-system-packages"])
+# Cần kiểm tra và cài các thư viện ngoài
+for pkg in ["rapidfuzz", "unidecode", "openpyxl", "pandas"]:
+  install_if_missing(pkg)
 
 # ======= Import sau khi đã đảm bảo cài =======
 import streamlit as st
