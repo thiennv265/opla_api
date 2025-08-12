@@ -1,6 +1,8 @@
 import importlib
 import subprocess
 import sys
+from datetime import datetime
+
 
 def auto_install(packages: dict):
     """
@@ -60,6 +62,7 @@ if uploaded_file:
         st.error("❌ File Excel phải có cột: Name, Address, ID, Stage")
     else:
         if st.button("🚀 Chạy kiểm tra trùng"):
+            print(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
             # Tiền xử lý
             df['Name_clean'] = df['Name'].apply(preprocess)
             df['Address_clean'] = df['Address'].apply(preprocess)
