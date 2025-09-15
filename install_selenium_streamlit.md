@@ -38,15 +38,15 @@ python3 --version
 
 echo "📥 Đang tải các file scraper..."
 
-wget -nc https://raw.githubusercontent.com/yourname/yourrepo/main/scraper1.py
-wget -nc https://raw.githubusercontent.com/yourname/yourrepo/main/scraper2.py
+wget -nc https://raw.githubusercontent.com/thiennv265/opla_api/refs/heads/main/s1.py
+wget -nc https://raw.githubusercontent.com/thiennv265/opla_api/refs/heads/main/s2.py
 
 echo "✅ Tải xong."
 
-echo "chmod +x install_selenium_streamlit.sh"
-echo "./install_selenium_streamlit.sh"
 echo "🚀 Bây giờ bạn có thể chạy ứng dụng Streamlit như sau:"
-echo "streamlit run scraper1.py --server.port=8501 --server.address=0.0.0.0"
-echo "streamlit run scraper2.py --server.port=8502 --server.address=0.0.0.0"
+echo "streamlit run s1.py --server.port=8501 --server.address=0.0.0.0"
+echo "streamlit run s2.py --server.port=8502 --server.address=0.0.0.0"
 
 -----
+chmod +x install_selenium_streamlit.sh
+./install_selenium_streamlit.sh
