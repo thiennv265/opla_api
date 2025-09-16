@@ -40,7 +40,7 @@ chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--log-level=3")
 
 # service = Service("/usr/local/bin/chromedriver")
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
 # ==== 🕷️ Crawler ====
 def scrape_shopeefood(url, driver):
