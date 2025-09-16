@@ -11,24 +11,18 @@ sudo apt install python3 python3-pip -y
 
 echo "📦 Cài đặt thư viện Python..."
 pip3 install --upgrade pip
-pip3 install streamlit selenium beautifulsoup4 pandas openpyxl
+pip3 install streamlit selenium beautifulsoup4 pandas openpyxl webdriver-manager
 
 echo "🌐 Tải và cài đặt Google Chrome..."
-wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O chrome.deb
-sudo apt install ./chrome.deb -y
-rm chrome.deb
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo apt install ./google-chrome-stable_current_amd64.deb -y
+rm google-chrome-stable_current_amd64.deb
 
 echo "🔍 Xác định version Chrome..."
 CHROME_VERSION=$(google-chrome --version | grep -oP '[0-9.]+' | head -1 | cut -d '.' -f 1)
 echo "→ Chrome major version: $CHROME_VERSION"
 
 echo "⚙️ Tải ChromeDriver tương thích..."
-LATEST_DRIVER=$(wget -qO- "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}")
-wget https://chromedriver.storage.googleapis.com/${LATEST_DRIVER}/chromedriver_linux64.zip -O chromedriver.zip
-unzip chromedriver.zip
-sudo mv chromedriver /usr/local/bin/
-sudo chmod +x /usr/local/bin/chromedriver
-rm chromedriver.zip
 
 echo "✅ Cài đặt hoàn tất!"
 echo "📍 Kiểm tra phiên bản:"
