@@ -10,6 +10,11 @@ echo "🐍 Cài đặt Python & pip..."
 sudo apt install python3 python3-pip -y
 
 echo "📦 Cài đặt thư viện Python..."
+
+sudo apt install python3-venv -y
+python3 -m venv venv
+source venv/bin/activate
+
 pip3 install --upgrade pip
 pip3 install streamlit selenium beautifulsoup4 pandas openpyxl webdriver-manager
 
@@ -31,7 +36,7 @@ chromedriver --version
 python3 --version
 
 echo "📥 Đang tải các file scraper..."
-
+sudo apt install tmux -y
 wget -nc https://raw.githubusercontent.com/thiennv265/opla_api/refs/heads/main/s1.py
 wget -nc https://raw.githubusercontent.com/thiennv265/opla_api/refs/heads/main/s2.py
 
@@ -41,6 +46,13 @@ echo "🚀 Bây giờ bạn có thể chạy ứng dụng Streamlit như sau:"
 echo "streamlit run s1.py --server.port=8501 --server.address=0.0.0.0"
 echo "streamlit run s2.py --server.port=8502 --server.address=0.0.0.0"
 
+
 -----
 chmod +x install_selenium_streamlit.sh
 ./install_selenium_streamlit.sh
+
+tmux
+tmux new -s streamlit_app
+Ctrl + b, sau đó d
+tmux attach -t ten_phien	Gắn lại vào phiên đã tách
+tmux kill-session -t ten_phien
