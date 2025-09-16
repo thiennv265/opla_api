@@ -9,7 +9,7 @@ from io import BytesIO
 import openpyxl
 from datetime import datetime
 import os
-
+from webdriver_manager.chrome import ChromeDriverManager
 # ==== 🕒 Utility ====
 def current_timestamp():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -39,8 +39,8 @@ chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--log-level=3")
 
-service = Service("/usr/local/bin/chromedriver")
-driver = webdriver.Chrome(service=service, options=chrome_options)
+# service = Service("/usr/local/bin/chromedriver")
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 # ==== 🕷️ Crawler ====
 def scrape_shopeefood(url, driver):
