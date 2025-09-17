@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "🔧 Đang cập nhật hệ thống..."
-sudo apt update && sudo apt upgrade -y
+# sudo apt update && sudo apt upgrade -y
 
 echo "🐍 Cài đặt Python & pip..."
 sudo apt install python3 python3-pip -y
