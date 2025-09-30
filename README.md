@@ -1,14 +1,32 @@
 # opla_api
 wget -O main.py https://raw.githubusercontent.com/user/repo/branch/path/to/file.py
 sudo apt update
-sudo apt install python3 python3-pip nginx certbot python3-certbot-nginx python3-fastapi python3-uvicorn tmux python3-venv -y && python3 -m venv venv && source venv/bin/activate && pip3 install fastapi uvicorn requests pandas fastapi cachetools urllib3 openpyxl numpy simplejson asyncio rapidfuzz aiohttp
+sudo apt install python3 python3-pip nginx certbot tmux python3-venv -y && python3 -m venv venv && source venv/bin/activate && pip3 install fastapi uvicorn requests pandas fastapi urllib3 openpyxl numpy simplejson asyncio aiohttp
 tmux new -s fastapi
 uvicorn main:app --host 0.0.0.0 --port 8764 --reload --timeout-keep-alive 1800 --no-access-log
 tmux a -t fastapi
 sudo nano /etc/nginx/sites-available/opla.2tr.top
+
+"
+server {
+	listen 80;
+    server_name opla.2tr.top;
+
+    location / {
+        proxy_pass http://127.0.0.1:8764;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 1800;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    }
+}
+"
 sudo ln -s /etc/nginx/sites-available/opla.2tr.top /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+sudo nginx -t && sudo systemctl reload nginx
 chỉnh ip vps
 sudo certbot --nginx -d opla.2tr.top
 
