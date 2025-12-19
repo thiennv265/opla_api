@@ -1,6 +1,9 @@
 #!/bin/bash
 echo "🔧 Đang cập nhật hệ thống..."
 # sudo apt update && sudo apt upgrade -y
+sudo sed -i 's/vn.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list
+sudo apt clean
+sudo apt update
 
 echo "🐍 Cài đặt Python & pip..."
 sudo apt install python3 python3-pip -y
